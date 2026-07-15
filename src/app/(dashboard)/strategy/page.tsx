@@ -3,7 +3,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getKPIs, getChannelData } from "@/services/dashboardService";
 import { getFacebookCampaigns, getFacebookMetrics } from "@/services/facebookService";
-import type { FacebookCampaign, FacebookAdSummary } from "@/types/index";
+import type {
+  FacebookCampaign,
+  FacebookAdSummary,
+  PostInsight,
+  ContentRecommendation,
+} from "@/types/index";
 import { formatCurrency, formatNumber, cn } from "@/lib/utils";
 import {
   DollarSign,
@@ -17,6 +22,11 @@ import {
   AlertTriangle,
   Info,
   CheckCircle2,
+  Eye,
+  Globe,
+  Image,
+  Loader2,
+  BarChart3,
 } from "lucide-react";
 
 // ============================================================
@@ -205,6 +215,18 @@ export default function StrategyPage() {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // ---- Content strategy state ----
+  const [contentPosts, setContentPosts] = useState<PostInsight[]>([]);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [contentError, setContentError] = useState<string | null>(null);
+
+  // ---- Content AI state ----
+  const [contentRecommendation, setContentRecommendation] =
+    useState<ContentRecommendation | null>(null);
+  const [contentAIThinking, setContentAIThinking] = useState(false);
+  const [contentAIError, setContentAIError] = useState<string | null>(null);
+  const [isContentFallback, setIsContentFallback] = useState(false);
+
   // ---- Load data on mount ----
   const loadData = useCallback(async () => {
     setLoadingData(true);
@@ -231,6 +253,72 @@ export default function StrategyPage() {
     loadData();
   }, [loadData]);
 
+  // ---- Load content insights on mount ----
+  const fetchContentData = useCallback(async () => {
+    setContentLoading(true);
+    setContentError(null);
+    try {
+      const [igRes, fbRes] = await Promise.allSettled([
+        fetch("/api/insights/instagram"),
+        fetch("/api/insights/facebook"),
+      ]);
+
+      const all: PostInsight[] = [];
+
+      if (igRes.status === "fulfilled" && igRes.value.ok) {
+        const json = await igRes.value.json();
+        all.push(...(json.posts ?? []));
+      }
+      if (fbRes.status === "fulfilled" && fbRes.value.ok) {
+        const json = await fbRes.value.json();
+        all.push(...(json.posts ?? []));
+      }
+
+      if (all.length === 0 && igRes.status !== "fulfilled") {
+        setContentError("Could not load content insights from either platform.");
+      }
+
+      setContentPosts(all);
+    } catch (err) {
+      setContentError(
+        err instanceof Error ? err.message : "Failed to load content insights"
+      );
+    } finally {
+      setContentLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchContentData();
+  }, [fetchContentData]);
+
+  // ---- Content AI analysis ----
+  const runContentAnalysis = useCallback(async () => {
+    if (contentAIThinking) return;
+    setContentAIThinking(true);
+    setContentAIError(null);
+    setContentRecommendation(null);
+    setIsContentFallback(false);
+
+    try {
+      const res = await fetch("/api/strategy/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ posts: contentPosts }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setContentRecommendation(json);
+      if (json.fallback) setIsContentFallback(true);
+    } catch (err) {
+      setContentAIError(
+        err instanceof Error ? err.message : "Content analysis failed"
+      );
+    } finally {
+      setContentAIThinking(false);
+    }
+  }, [contentAIThinking, contentPosts]);
+
   // ---- Derived data ----
   const topCampaign = useMemo(() => {
     if (fbCampaigns.length === 0) return null;
@@ -241,6 +329,66 @@ export default function StrategyPage() {
     if (fbCampaigns.length === 0) return null;
     return [...fbCampaigns].sort((a, b) => a.roas - b.roas)[0];
   }, [fbCampaigns]);
+
+  // ---- Content derived data ----
+  const avgEngagementRate = useMemo(() => {
+    if (contentPosts.length === 0) return 0;
+    const total = contentPosts.reduce((s, p) => {
+      const rate =
+        p.metrics.impressions > 0
+          ? ((p.metrics.likes + p.metrics.comments) / p.metrics.impressions) * 100
+          : 0;
+      return s + rate;
+    }, 0);
+    return total / contentPosts.length;
+  }, [contentPosts]);
+
+  const topContentPost = useMemo(() => {
+    if (contentPosts.length === 0) return null;
+    return [...contentPosts].sort(
+      (a, b) => b.metrics.engagement - a.metrics.engagement
+    )[0];
+  }, [contentPosts]);
+
+  const bestFormat = useMemo(() => {
+    const igPosts = contentPosts.filter(
+      (p) => p.platform === "instagram" && p.mediaType
+    );
+    if (igPosts.length === 0) return "—";
+    const byType = new Map<string, { total: number; count: number }>();
+    igPosts.forEach((p) => {
+      const t = p.mediaType!;
+      const prev = byType.get(t) ?? { total: 0, count: 0 };
+      byType.set(t, { total: prev.total + p.metrics.engagement, count: prev.count + 1 });
+    });
+    let best = "—";
+    let bestAvg = 0;
+    byType.forEach((v, k) => {
+      const avg = v.total / v.count;
+      if (avg > bestAvg) {
+        bestAvg = avg;
+        best = k;
+      }
+    });
+    const labels: Record<string, string> = {
+      IMAGE: "Image",
+      VIDEO: "Video",
+      CAROUSEL_ALBUM: "Carousel",
+    };
+    return labels[best] ?? best;
+  }, [contentPosts]);
+
+  const platformBreakdown = useMemo(() => {
+    const igCount = contentPosts.filter((p) => p.platform === "instagram").length;
+    const fbCount = contentPosts.filter((p) => p.platform === "facebook").length;
+    return { ig: igCount, fb: fbCount };
+  }, [contentPosts]);
+
+  const sortedContentPosts = useMemo(() => {
+    return [...contentPosts].sort(
+      (a, b) => b.metrics.engagement - a.metrics.engagement
+    );
+  }, [contentPosts]);
 
   // ---- AI analysis ----
   const runAnalysis = useCallback(async () => {
@@ -313,15 +461,359 @@ export default function StrategyPage() {
       {/* ================================================================ */}
       <div>
         <h1 className="text-[28px] font-semibold text-[var(--heading)]">
-          AI Strategy Agent
+          Strategy
         </h1>
         <p className="text-[14px] text-[var(--body)] mt-1">
-          Analyze your marketing data and get budget recommendations
+          Content performance insights from live posts · ad strategy analysis with AI
         </p>
       </div>
 
       {/* ================================================================ */}
-      {/* 2. Data Snapshot Cards                                           */}
+      {/* 2. Content Performance Overview (LIVE DATA)                       */}
+      {/* ================================================================ */}
+      <div className={`${CARD} p-5`}>
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 className="h-5 w-5 text-[var(--brand)]" />
+          <h2 className="text-[16px] font-semibold text-[var(--heading)]">
+            Content Strategy
+          </h2>
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[2px]"
+            style={{
+              backgroundColor: "rgba(34,197,94,0.15)",
+              color: "var(--success)",
+              border: "1px solid rgba(34,197,94,0.3)",
+            }}
+          >
+            LIVE DATA
+          </span>
+        </div>
+
+        {contentLoading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : contentError && contentPosts.length === 0 ? (
+          <div className="text-center py-8">
+            <AlertTriangle className="h-8 w-8 text-[var(--danger)] opacity-30 mx-auto mb-3" />
+            <p className="text-[14px] text-[var(--danger)] font-medium">
+              {contentError}
+            </p>
+            <button
+              onClick={fetchContentData}
+              className="mt-2 px-4 py-1.5 text-[13px] font-semibold text-white rounded-[2px]"
+              style={BRAND_GRADIENT}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Published Posts"
+              value={String(contentPosts.length)}
+              icon={FileText}
+              iconColor="var(--brand)"
+              sub={`IG: ${platformBreakdown.ig} · FB: ${platformBreakdown.fb}`}
+            />
+            <StatCard
+              label="Avg Engagement Rate"
+              value={`${avgEngagementRate.toFixed(2)}%`}
+              icon={TrendingUp}
+              iconColor="#8B5CF6"
+              sub={contentPosts.length > 0 ? "Likes+comments ÷ impressions" : "—"}
+            />
+            <StatCard
+              label="Top Post"
+              value={
+                topContentPost
+                  ? `${topContentPost.metrics.engagement} eng.`
+                  : "—"
+              }
+              icon={Eye}
+              iconColor="var(--success)"
+              sub={
+                topContentPost
+                  ? `[${topContentPost.platform}] ${(topContentPost.caption ?? "").slice(0, 34)}`
+                  : "—"
+              }
+            />
+            <StatCard
+              label="Best Format"
+              value={bestFormat}
+              icon={Image}
+              iconColor="var(--warning)"
+              sub="By avg engagement"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ================================================================ */}
+      {/* 3. Published Posts Performance Table (LIVE DATA)                  */}
+      {/* ================================================================ */}
+      {contentLoading ? (
+        <TableSkeleton cols={6} />
+      ) : contentPosts.length > 0 ? (
+        <div className={`${CARD} overflow-x-auto`}>
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="bg-[rgba(255,255,255,0.02)] border-b border-[var(--border-default)]">
+                <th className="text-left px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Post
+                </th>
+                <th className="text-left px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Platform
+                </th>
+                <th className="text-right px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Impressions
+                </th>
+                <th className="text-right px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Reach
+                </th>
+                <th className="text-right px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Engagement
+                </th>
+                <th className="text-right px-6 py-3 text-[12px] font-medium text-[var(--body-subtle)] uppercase tracking-wider">
+                  Likes
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedContentPosts.map((post) => {
+                const engRate =
+                  post.metrics.impressions > 0
+                    ? (
+                        ((post.metrics.likes + post.metrics.comments) /
+                          post.metrics.impressions) *
+                        100
+                      ).toFixed(2)
+                    : "0.00";
+                return (
+                  <tr
+                    key={post.id}
+                    className="border-b border-[var(--border-default)] transition-colors hover:bg-[rgba(255,255,255,0.02)]"
+                  >
+                    <td className="px-6 py-4 text-[14px] font-medium text-[var(--heading)] max-w-[260px] truncate">
+                      <a
+                        href={post.permalink ?? "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-[var(--brand)] transition-colors"
+                        title={post.caption ?? ""}
+                      >
+                        {post.caption?.slice(0, 64) ?? "(no caption)"}
+                      </a>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[12px] font-semibold border capitalize"
+                        style={
+                          post.platform === "instagram"
+                            ? {
+                                backgroundColor: "var(--brand-softer)",
+                                color: "var(--brand)",
+                                borderColor: "var(--border-brand-subtle)",
+                              }
+                            : {
+                                backgroundColor: "rgba(139,92,246,0.12)",
+                                color: "#8B5CF6",
+                                borderColor: "rgba(139,92,246,0.3)",
+                              }
+                        }
+                      >
+                        {post.platform === "instagram" ? (
+                          <Globe className="h-3 w-3" />
+                        ) : (
+                          <Globe className="h-3 w-3" />
+                        )}
+                        {post.platform}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right text-[14px] text-[var(--body)]">
+                      {formatNumber(post.metrics.impressions)}
+                    </td>
+                    <td className="px-6 py-4 text-right text-[14px] text-[var(--body)]">
+                      {formatNumber(post.metrics.reach)}
+                    </td>
+                    <td className="px-6 py-4 text-right text-[14px] font-semibold text-[var(--heading)]">
+                      {post.metrics.engagement}
+                      <span className="text-[12px] text-[var(--body-subtle)] ml-1">
+                        ({engRate}%)
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right text-[14px] text-[var(--body)]">
+                      {formatNumber(post.metrics.likes)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : !contentError ? (
+        <div className={`${CARD} py-16 text-center`}>
+          <Image className="h-12 w-12 text-[var(--body-subtle)] opacity-30 mx-auto mb-4" />
+          <p className="text-[var(--body)] font-medium">
+            No published posts yet
+          </p>
+          <p className="text-[12px] text-[var(--body-subtle)] mt-1">
+            Start publishing from Content &amp; Posts to see performance data here
+          </p>
+        </div>
+      ) : null}
+
+      {/* ================================================================ */}
+      {/* 4. AI Content Strategy Panel                                      */}
+      {/* ================================================================ */}
+      <div className={`${CARD} p-5`}>
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="h-5 w-5 text-[var(--brand)]" />
+          <h2 className="text-[16px] font-semibold text-[var(--heading)]">
+            AI Content Strategy
+          </h2>
+        </div>
+
+        <p className="text-[13px] text-[var(--body)] mb-4">
+          Let AI analyze your published content performance and recommend what to
+          post more of, what to change, and which formats work best.
+        </p>
+
+        <button
+          onClick={runContentAnalysis}
+          disabled={
+            contentAIThinking || contentPosts.length === 0
+          }
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          style={BRAND_GRADIENT}
+        >
+          {contentAIThinking ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {contentAIThinking
+            ? "Analyzing..."
+            : contentPosts.length === 0
+            ? "Publish posts to get AI analysis"
+            : "Analyze Content Strategy"}
+        </button>
+
+        {isContentFallback && contentRecommendation && (
+          <span className="ml-3 text-[11px] text-[var(--body-subtle)]">
+            Generic recommendation (AI unavailable)
+          </span>
+        )}
+
+        {/* Loading */}
+        {contentAIThinking && (
+          <div className="mt-5 space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="bg-[rgba(255,255,255,0.02)] rounded-[2px] p-3 animate-pulse"
+              >
+                <div className="h-3 bg-[rgba(255,255,255,0.05)] rounded-[2px] mb-2" />
+                <div
+                  className="h-3 bg-[rgba(255,255,255,0.05)] rounded-[2px]"
+                  style={{ width: `${85 - i * 15}%` }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {contentAIError && !contentRecommendation && (
+          <div
+            className="mt-5 p-3 rounded-[2px] flex items-start gap-2"
+            style={{
+              backgroundColor: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
+            }}
+          >
+            <AlertTriangle className="h-4 w-4 text-[var(--danger)] shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[13px] text-[var(--danger)] font-medium">
+                {contentAIError}
+              </p>
+              <button
+                onClick={runContentAnalysis}
+                className="text-[12px] font-semibold text-[var(--brand)] hover:text-[var(--fg-brand)] transition-colors mt-0.5"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Result */}
+        {contentRecommendation && !contentAIThinking && (
+          <div
+            className="mt-5 p-4 rounded-[2px] space-y-3"
+            style={{
+              backgroundColor: "var(--brand-softer)",
+              border: "1px solid var(--border-brand-subtle)",
+            }}
+          >
+            {/* Summary */}
+            <div className="bg-[rgba(0,0,0,0.2)] rounded-[2px] p-3">
+              <p className="text-[13px] text-[var(--body)] leading-relaxed font-medium">
+                {contentRecommendation.summary}
+              </p>
+            </div>
+            {/* Recommendations */}
+            {contentRecommendation.recommendations.length > 0 && (
+              <div className="space-y-2">
+                {contentRecommendation.recommendations.map((rec, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 bg-[rgba(0,0,0,0.2)] rounded-[2px] p-3"
+                  >
+                    <span className="text-[var(--brand)] text-[13px] font-bold shrink-0 mt-0.5">
+                      {i + 1}.
+                    </span>
+                    <p className="text-[13px] text-[var(--body)] leading-relaxed">
+                      {rec}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-[10px] text-[var(--body-subtle)]">
+              <Sparkles className="h-3 w-3" />
+              <span>AI-generated · Powered by OpenAI / DeepSeek</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ================================================================ */}
+      {/* 5. Ad Strategy (MOCK DATA — pending client ads connection)         */}
+      {/* ================================================================ */}
+      <div className="border-t border-[var(--border-default)] pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Target className="h-5 w-5 text-[var(--body-subtle)]" />
+          <h2 className="text-[16px] font-semibold text-[var(--heading)]">
+            Ad Strategy
+          </h2>
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[2px]"
+            style={{
+              backgroundColor: "rgba(249,115,22,0.12)",
+              color: "var(--warning)",
+              border: "1px solid rgba(249,115,22,0.3)",
+            }}
+          >
+            MOCK DATA — PENDING AD ACCOUNT
+          </span>
+        </div>
+      </div>
+
+      {/* ================================================================ */}
+      {/* 5a. Ad Data Snapshot Cards                                        */}
       {/* ================================================================ */}
       {loadingData ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -460,7 +952,7 @@ export default function StrategyPage() {
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-[var(--brand)]" />
           <h2 className="text-[16px] font-semibold text-[var(--heading)]">
-            Ask AI Strategy Agent
+            Ask AI Ads Strategy Agent
           </h2>
         </div>
 

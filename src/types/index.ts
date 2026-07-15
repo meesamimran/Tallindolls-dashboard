@@ -235,6 +235,38 @@ export interface ScheduledPost {
   content: string;
   platform: string;
   scheduledDate: string;
-  status: "scheduled" | "draft" | "published";
+  status: "scheduled" | "draft" | "ready" | "approved" | "published";
   productRef?: string;
+  /** formatted asset (data URL) so it can be published from the queue */
+  imageDataUrl?: string;
+  /** which surface it targets */
+  surface?: "feed" | "story" | "ad";
+}
+
+// --- Strategy / Content Insights ---
+
+export interface PostMetrics {
+  likes: number;
+  comments: number;
+  shares?: number;
+  reach: number;
+  impressions: number;
+  saves: number;
+  engagement: number;
+}
+
+export interface PostInsight {
+  id: string;
+  platform: "instagram" | "facebook";
+  caption?: string;
+  mediaUrl?: string;
+  permalink?: string;
+  mediaType?: string;
+  timestamp: string;
+  metrics: PostMetrics;
+}
+
+export interface ContentRecommendation {
+  recommendations: string[];
+  summary: string;
 }
