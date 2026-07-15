@@ -12,7 +12,7 @@ const ALLOWED = new Set([
   "/favicon.ico",
 ]);
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow static files and Next.js internals
