@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { ScheduledPost } from "@/types/index";
 import { cn } from "@/lib/utils";
-import PostComposer from "@/components/social/PostComposer";
+import PostComposer, { type PublishTask } from "@/components/social/PostComposer";
 import CarouselBuilder from "@/components/social/CarouselBuilder";
 import ApprovalQueue from "@/components/social/ApprovalQueue";
 import { publishPost } from "@/lib/publishPost";
 import { uploadToPublicUrl, isUploadConfigured } from "@/lib/uploadMedia";
 import { isVideoFile } from "@/lib/imageFormats";
-import { ImageIcon, Images, Send, Plus, Loader2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
+import { ImageIcon, Images, Send, Plus, Loader2, CheckCircle2, AlertCircle, ExternalLink, X } from "lucide-react";
 
 const CARD = "bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-[var(--shadow-xs)]";
 const GRADIENT_BRAND: React.CSSProperties = { background: "linear-gradient(135deg,#C8399C,#7C3AED)" };
@@ -37,6 +37,44 @@ export default function ContentPage() {
   const [carPublishResult, setCarPublishResult] = useState<{ ok: boolean; message: string; url?: string } | null>(null);
   const [carTargetPlatforms, setCarTargetPlatforms] = useState<("instagram" | "facebook")[]>(["instagram", "facebook"]);
   const [pendingCarouselFiles, setPendingCarouselFiles] = useState<File[] | null>(null);
+
+  // ── Publish task queue (shared with PostComposer) ──
+  const [publishTasks, setPublishTasks] = useState<PublishTask[]>([]);
+
+  const addPublishTask = useCallback((task: PublishTask) => {
+    setPublishTasks((prev) => [task, ...prev]);
+  }, []);
+
+  const updatePublishTask = useCallback((id: string, update: Partial<PublishTask>) => {
+    setPublishTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...update } : t)));
+  }, []);
+
+  const dismissPublishTask = useCallback((id: string) => {
+    setPublishTasks((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // Auto-dismiss success toasts after 5 seconds
+  const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  useEffect(() => {
+    publishTasks.forEach((task) => {
+      if (task.status === "success" && !timersRef.current.has(task.id)) {
+        const timer = setTimeout(() => {
+          dismissPublishTask(task.id);
+          timersRef.current.delete(task.id);
+        }, 5000);
+        timersRef.current.set(task.id, timer);
+      }
+    });
+    // Cleanup stale timers
+    timersRef.current.forEach((timer, id) => {
+      if (!publishTasks.find((t) => t.id === id)) {
+        clearTimeout(timer);
+        timersRef.current.delete(id);
+      }
+    });
+  }, [publishTasks, dismissPublishTask]);
+
+  const hasActiveTasks = publishTasks.some((t) => t.status === "processing");
 
   const handleCreatePost = (post: ScheduledPost) => {
     setPosts((prev) => [post, ...prev]);
@@ -144,8 +182,17 @@ export default function ContentPage() {
 
       {/* Active content */}
       {mode === "single" && (
-        <PostComposer collections={COLLECTIONS} postTypes={POST_TYPES}
-          onCreatePost={handleCreatePost} onRequestCarousel={handleRequestCarousel} />
+        <PostComposer
+          collections={COLLECTIONS}
+          postTypes={POST_TYPES}
+          onCreatePost={handleCreatePost}
+          onRequestCarousel={handleRequestCarousel}
+          publishTasks={publishTasks}
+          onAddPublishTask={addPublishTask}
+          onUpdatePublishTask={updatePublishTask}
+          onDismissPublishTask={dismissPublishTask}
+          hasActiveTasks={hasActiveTasks}
+        />
       )}
 
       {mode === "carousel" && (
@@ -178,6 +225,53 @@ export default function ContentPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Publish Status ── */}
+      {publishTasks.length > 0 && (
+        <div className="space-y-2">
+          {publishTasks.map((task) => (
+            <div
+              key={task.id}
+              className={cn(
+                "flex items-center gap-3 pl-4 pr-2 py-3 rounded-[2px] animate-fade-in",
+                task.status === "processing"
+                  ? "bg-[var(--neutral-primary-soft)] border-l-[3px] border-l-[var(--brand)]"
+                  : task.status === "success"
+                    ? "bg-[var(--success)] text-white"
+                    : "bg-[var(--danger)] text-white"
+              )}
+            >
+              {task.status === "processing" ? (
+                <Loader2 className="size-4 text-[var(--brand)] animate-spin shrink-0" />
+              ) : task.status === "success" ? (
+                <CheckCircle2 className="size-4 shrink-0" />
+              ) : (
+                <AlertCircle className="size-4 shrink-0" />
+              )}
+              <p className="text-[13px] font-medium flex-1 leading-snug">{task.message}</p>
+              {task.url && (
+                <a href={task.url} target="_blank" rel="noopener noreferrer"
+                  className={cn(
+                    "shrink-0 text-[12px] font-semibold px-2 py-1 rounded-[2px] transition-colors",
+                    task.status === "success" ? "bg-white/20 hover:bg-white/30 text-white"
+                      : task.status === "error" ? "bg-white/20 hover:bg-white/30 text-white"
+                      : "bg-[var(--brand-softer)] hover:bg-[var(--brand-soft)] text-[var(--brand)]"
+                  )}>
+                  View
+                </a>
+              )}
+              <button onClick={() => dismissPublishTask(task.id)}
+                className={cn(
+                  "shrink-0 p-1 rounded-[2px] transition-colors",
+                  task.status === "processing" ? "hover:bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)]"
+                    : "hover:bg-white/20 text-white/70 hover:text-white"
+                )}>
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

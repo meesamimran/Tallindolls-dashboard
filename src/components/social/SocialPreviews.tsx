@@ -696,7 +696,8 @@ function InstagramFeedPost({
           >
             <div
               className={cn(
-                "w-full flex items-center justify-center bg-black",
+                "w-full flex items-center justify-center",
+                displayIsVideo ? "bg-black" : "bg-[#fafafa]",
                 edgeToEdge ? "" : "border-y border-[#efefef]"
               )}
               style={{ aspectRatio: "1/1" }}
@@ -731,7 +732,8 @@ function InstagramFeedPost({
         ) : (
           <div
             className={cn(
-              "w-full flex items-center justify-center bg-black",
+              "w-full flex items-center justify-center",
+              displayIsVideo ? "bg-black" : "bg-[#fafafa]",
               edgeToEdge ? "" : "border-y border-[#efefef]"
             )}
             style={{ aspectRatio: "1/1" }}

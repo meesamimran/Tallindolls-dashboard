@@ -53,11 +53,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1) create child containers (all must be square — same aspect ratio)
+    // 1) create child containers — ensure all URLs are public HTTPS
     const childIds: string[] = [];
     for (const url of imageUrls) {
+      // Upload data: URLs to Cloudinary if needed
+      let publicUrl = url;
+      if (url.startsWith("data:")) {
+        const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+        const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+        if (!cloud || !preset) throw new Error("Cloudinary not configured");
+        const [header, base64] = url.split(",");
+        const mime = /data:(.*?);/.exec(header)?.[1] || "image/jpeg";
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const form = new FormData();
+        form.append("file", new Blob([bytes], { type: mime }), "slide.jpg");
+        form.append("upload_preset", preset);
+        const up = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, { method: "POST", body: form });
+        const upJson = await up.json();
+        if (!upJson.secure_url) throw new Error("Cloudinary upload failed for carousel slide");
+        publicUrl = upJson.secure_url;
+      }
+
       const child = await graphPost(`${IG_USER_ID}/media`, {
-        image_url: url,
+        image_url: publicUrl,
         is_carousel_item: "true",
         access_token: TOKEN,
       });

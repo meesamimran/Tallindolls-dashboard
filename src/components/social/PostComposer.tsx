@@ -30,7 +30,7 @@ import {
   BRAND_SYSTEM_PROMPT,
 } from "@/lib/captionParse";
 import { publishPost } from "@/lib/publishPost";
-import { isUploadConfigured } from "@/lib/uploadMedia";
+import { uploadToPublicUrl, isUploadConfigured } from "@/lib/uploadMedia";
 import type { ScheduledPost } from "@/types/index";
 import {
   Sparkles,
@@ -47,6 +47,7 @@ import {
   ImageIcon,
   ChevronDown,
   Upload,
+  X,
 } from "lucide-react";
 
 // ── Constants ──
@@ -106,11 +107,24 @@ function previewOptionsFor(isVideo: boolean): PreviewOption[] {
 
 // ── Props ──
 
+export interface PublishTask {
+  id: string;
+  status: "processing" | "success" | "error";
+  message: string;
+  url?: string;
+}
+
 interface PostComposerProps {
   collections: string[];
   postTypes: string[];
   onCreatePost: (post: ScheduledPost) => void;
   onRequestCarousel?: (files: File[]) => void;
+  // Publish task queue (owned by ContentPage)
+  publishTasks: PublishTask[];
+  onAddPublishTask: (task: PublishTask) => void;
+  onUpdatePublishTask: (id: string, update: Partial<PublishTask>) => void;
+  onDismissPublishTask: (id: string) => void;
+  hasActiveTasks: boolean;
 }
 
 export default function PostComposer({
@@ -118,6 +132,11 @@ export default function PostComposer({
   postTypes,
   onCreatePost,
   onRequestCarousel: _onRequestCarousel,
+  publishTasks,
+  onAddPublishTask,
+  onUpdatePublishTask,
+  onDismissPublishTask,
+  hasActiveTasks,
 }: PostComposerProps) {
   // ── Media state ──
   const [mediaFiles, setMediaFiles] = useState<MediaFileEntry[]>([]);
@@ -174,11 +193,12 @@ export default function PostComposer({
   const [caption, setCaption] = useState<Caption>(EMPTY_CAPTION);
   const [genError, setGenError] = useState<string | null>(null);
 
-  // ── Publishing state ──
-  const [publishing, setPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<
-    { ok: boolean; message: string; url?: string } | null
-  >(null);
+  // ── Publishing state (lifted to ContentPage) ──
+
+  const retryPublishTask = (id: string) => {
+    onDismissPublishTask(id);
+    handlePublish();
+  };
 
   // ── Derive preview image ──
   const activeCrops = activeFile?.crops ?? {};
@@ -207,16 +227,36 @@ export default function PostComposer({
     }
   }, [isVideo]);
 
-  // ── Recompute crops when focal point changes ──
+  // ── Update imgElRef when active slide changes ──
+  // This ensures crop calculations + smart formatting use the correct image
+  // for each slide, not just the first one.
   useEffect(() => {
-    if (!imgElRef.current || !activeFile) return;
+    if (!activeFile) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const img = await loadImage(activeFile.dataUrl);
+        if (!cancelled) imgElRef.current = img;
+      } catch { /* */ }
+    })();
+    return () => { cancelled = true; };
+  }, [activeSlideIdx, activeFile?.dataUrl]);
+
+  // ── Recompute crops for the active slide ──
+  // Loads the image FRESH from activeFile.dataUrl so each slide always
+  // uses its own image — no stale imgElRef race condition.
+  useEffect(() => {
+    if (!activeFile) return;
     let cancelled = false;
     const run = async () => {
+      const img = await loadImage(activeFile.dataUrl);
+      if (cancelled) return;
+
       const next: Record<string, string> = {};
       const fitMode = isVideo ? ("cover" as const) : ("contain" as const);
       for (const preset of FORMAT_PRESETS) {
         try {
-          next[preset.key] = cropToPreset(imgElRef.current!, preset, {
+          next[preset.key] = cropToPreset(img, preset, {
             focusX,
             focusY,
             fit: fitMode,
@@ -230,7 +270,7 @@ export default function PostComposer({
       const { needsSmartFormat, formatImageSmart } = await import("@/lib/smartFormat");
       for (const preset of FORMAT_PRESETS) {
         if (cancelled) return;
-        if (!needsSmartFormat(imgElRef.current!, preset)) continue;
+        if (!needsSmartFormat(img, preset)) continue;
         setFmtStatus(`Enhancing ${preset.label}…`);
         try {
           const { dataUrl } = await formatImageSmart(activeFile.dataUrl, preset, {
@@ -431,21 +471,50 @@ export default function PostComposer({
   }, [suggestedThumbnails]);
 
   const handleEditFile = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (editingFileId === id) {
-        // Close edit — apply changes
+        // Close edit — apply changes by regenerating crops
+        const file = mediaFiles.find((f) => f.id === id);
+        if (file && editPreview) {
+          try {
+            const img = await loadImage(file.dataUrl);
+            const nextCrops: Record<string, string> = {};
+            for (const preset of FORMAT_PRESETS) {
+              try {
+                nextCrops[preset.key] = cropToPreset(img, preset, {
+                  fit: editFit,
+                  focusX,
+                  focusY,
+                });
+              } catch { /* */ }
+            }
+            setMediaFiles((prev) => {
+              const n = [...prev];
+              const idx = n.findIndex((f) => f.id === id);
+              if (idx >= 0) n[idx] = { ...n[idx], crops: { ...(n[idx].crops ?? {}), ...nextCrops } };
+              return n;
+            });
+            imgElRef.current = img;
+          } catch { /* */ }
+        }
         setEditingFileId(null);
         setEditPreview(null);
       } else {
         setEditingFileId(id);
         setEditFit("contain");
         setEditPreview(null);
-        // Switch active slide to the one being edited
         const idx = mediaFiles.findIndex((f) => f.id === id);
-        if (idx >= 0) setActiveSlideIdx(idx);
+        if (idx >= 0) {
+          setActiveSlideIdx(idx);
+          // Load the file's image into imgElRef for crop calculations
+          try {
+            const img = await loadImage(mediaFiles[idx].dataUrl);
+            imgElRef.current = img;
+          } catch { /* */ }
+        }
       }
     },
-    [editingFileId, mediaFiles]
+    [editingFileId, mediaFiles, editPreview, editFit, focusX, focusY]
   );
 
   const handleReset = useCallback(() => {
@@ -457,6 +526,8 @@ export default function PostComposer({
     setFocusY(0.5);
     setSuggestedThumbnails([]);
     setCustomThumbnail(null);
+    setCaption(EMPTY_CAPTION);
+    setDetail("");
   }, []);
 
   const slug = (s: string) =>
@@ -550,88 +621,176 @@ export default function PostComposer({
     targets.forEach((t) => onCreatePost(buildPost("draft", t.platform, t.surface)));
   };
 
-  const handlePublish = async () => {
-    setPublishing(true);
-    setPublishResult(null);
+  const handlePublish = () => {
     if (targets.length === 0) {
-      setPublishResult({
-        ok: false,
+      onAddPublishTask({
+        id: `err-${Date.now()}`,
+        status: "error",
         message: "Select at least one destination in 'Publish to'.",
       });
-      setPublishing(false);
       return;
     }
 
-    if (isVideo && activeFile) {
+    const taskId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    onAddPublishTask({
+      id: taskId,
+      status: "processing",
+      message: isVideo
+        ? "🎬 Processing video…"
+        : multiSlide
+          ? `📷 Processing ${mediaFiles.length} images…`
+          : "📷 Processing image…",
+    });
+
+    // Run the actual publish in background
+    (async () => {
+      try {
+        if (isVideo && activeFile) {
+          if (!isUploadConfigured()) throw new Error("Cloudinary not configured.");
+          // Upload video
+          const form = new FormData();
+          form.append("file", activeFile.file);
+          form.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
+          const up = await fetch(
+            `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`,
+            { method: "POST", body: form }
+          );
+          const upJson = await up.json();
+          if (!upJson.secure_url) throw new Error("Video upload failed");
+          const videoUrl = upJson.secure_url;
+
+          // Upload selected thumbnail if available
+          let thumbUrl: string | undefined;
+          const selectedThumb = activeFile.selectedThumbnail;
+          if (selectedThumb) {
+            try {
+              const thumbForm = new FormData();
+              const thumbBlob = await (await fetch(selectedThumb)).blob();
+              thumbForm.append("file", thumbBlob, "thumbnail.jpg");
+              thumbForm.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
+              const thumbUp = await fetch(
+                `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+                { method: "POST", body: thumbForm }
+              );
+              const thumbJson = await thumbUp.json();
+              if (thumbJson.secure_url) thumbUrl = thumbJson.secure_url;
+            } catch { /* best-effort */ }
+          }
+
+          for (const t of targets) {
+            const ep = t.platform === "instagram" ? "/api/publish/instagram" : "/api/publish/facebook";
+            const isStory = t.surface === "story";
+            const body: Record<string, unknown> =
+              t.platform === "instagram"
+                ? { imageUrl: videoUrl, caption: captionText(), isStory, isVideo: true, coverUrl: thumbUrl }
+                : { imageUrl: videoUrl, message: isStory ? undefined : captionText(), isStory, isVideo: true, thumb: thumbUrl };
+            const res = await fetch(ep, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const json = await res.json();
+            if (res.ok && json.id) {
+              onUpdatePublishTask(taskId, {
+                status: "success",
+                message: `🎬 Video published to ${t.platform} ${t.surface}${thumbUrl ? " (custom thumbnail)" : ""}! You can check it now.`,
+                url: json.permalink,
+              });
+              onCreatePost(buildPost("published", t.platform, t.surface));
+            } else {
+              onUpdatePublishTask(taskId, {
+                status: "error",
+                message: json.error || "Video publish failed",
+              });
+            }
+          }
+          handleReset();
+          return;
+        }
+
+    // ── Carousel (multi-image) publishing ──
+    if (multiSlide) {
       try {
         if (!isUploadConfigured()) throw new Error("Cloudinary not configured.");
-        // Upload video
-        const form = new FormData();
-        form.append("file", activeFile.file);
-        form.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
-        const up = await fetch(
-          `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`,
-          { method: "POST", body: form }
-        );
-        const upJson = await up.json();
-        if (!upJson.secure_url) throw new Error("Video upload failed");
-        const videoUrl = upJson.secure_url;
+        // Upload all slides to Cloudinary
+        const urls: string[] = [];
+        for (const slide of mediaFiles) {
+          const slideCrop = slide.crops["square"] ?? slide.dataUrl;
+          const url = await uploadToPublicUrl(slideCrop);
+          urls.push(url);
+        }
 
-        // Upload selected thumbnail if available
-        let thumbUrl: string | undefined;
-        const selectedThumb = activeFile.selectedThumbnail;
-        if (selectedThumb) {
+        let anyOk = false;
+        let firstUrl: string | undefined;
+        const msgs: string[] = [];
+
+        // Instagram → carousel API
+        if (targetPlatforms.includes("instagram")) {
           try {
-            const thumbForm = new FormData();
-            const thumbBlob = await (await fetch(selectedThumb)).blob();
-            thumbForm.append("file", thumbBlob, "thumbnail.jpg");
-            thumbForm.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
-            const thumbUp = await fetch(
-              `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-              { method: "POST", body: thumbForm }
-            );
-            const thumbJson = await thumbUp.json();
-            if (thumbJson.secure_url) thumbUrl = thumbJson.secure_url;
-          } catch {
-            // Thumbnail upload is best-effort — continue without it
+            const res = await fetch("/api/publish/carousel", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrls: urls, caption: captionText() }),
+            });
+            const json = await res.json();
+            if (res.ok && json.id) {
+              anyOk = true;
+              firstUrl = json.permalink;
+              msgs.push(`IG carousel — ${urls.length} slides published`);
+              onCreatePost(buildPost("published", "instagram", "feed"));
+            } else {
+              msgs.push(`IG carousel failed: ${json.error}`);
+            }
+          } catch (e) {
+            msgs.push(`IG carousel error: ${e instanceof Error ? e.message : "Unknown"}`);
           }
         }
 
-        for (const p of targetPlatforms) {
-          const ep = p === "instagram" ? "/api/publish/instagram" : "/api/publish/facebook";
-          const body: Record<string, unknown> =
-            p === "instagram"
-              ? { imageUrl: videoUrl, caption: captionText(), isStory: true }
-              : { imageUrl: videoUrl, message: captionText(), isStory: true, thumb: thumbUrl };
-          const res = await fetch(ep, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          const json = await res.json();
-          if (res.ok && json.id) {
-            setPublishResult({
-              ok: true,
-              message: `Video published to ${p}${thumbUrl ? " (with custom thumbnail)" : ""}.`,
-              url: json.permalink,
+        // Facebook → publish first slide as photo (FB doesn't have carousel API for pages)
+        if (targetPlatforms.includes("facebook")) {
+          try {
+            const r = await publishPost({
+              platform: "facebook",
+              surface: "feed",
+              imageDataUrl: urls[0],
+              captionText: captionText(),
             });
-            onCreatePost(buildPost("published", p, "story"));
-          } else {
-            setPublishResult({ ok: false, message: json.error || "Video publish failed" });
+            if (r.ok) {
+              anyOk = true;
+              firstUrl = firstUrl ?? r.url;
+              msgs.push("FB — first slide published");
+              onCreatePost(buildPost("published", "facebook", "feed"));
+            } else {
+              msgs.push(`FB failed: ${r.message}`);
+            }
+          } catch (e) {
+            msgs.push(`FB error: ${e instanceof Error ? e.message : "Unknown"}`);
           }
+        }
+
+        if (anyOk) {
+          onUpdatePublishTask(taskId, {
+            status: "success",
+            message: `📷 Carousel posted successfully! You can check it now.`,
+            url: firstUrl,
+          });
+          handleReset();
+        } else {
+          onUpdatePublishTask(taskId, {
+            status: "error",
+            message: msgs.join(" · "),
+          });
         }
       } catch (err) {
-        setPublishResult({
-          ok: false,
-          message: err instanceof Error ? err.message : "Video publish failed",
+        onUpdatePublishTask(taskId, {
+          status: "error",
+          message: err instanceof Error ? err.message : "Carousel publish failed",
         });
-      } finally {
-        setPublishing(false);
       }
       return;
     }
 
-    // Image publishing
+    // ── Single image publishing ──
     let anyOk = false;
     let firstUrl: string | undefined;
     const errs: string[] = [];
@@ -650,14 +809,26 @@ export default function PostComposer({
         errs.push(`${t.platform} ${t.surface}: ${r.message}`);
       }
     }
-    setPublishResult({
-      ok: anyOk,
-      message: anyOk
-        ? `Published to ${targets.length} destination${targets.length > 1 ? "s" : ""}.`
-        : errs.join(" · "),
-      url: firstUrl,
-    });
-    setPublishing(false);
+    if (anyOk) {
+      onUpdatePublishTask(taskId, {
+        status: "success",
+        message: `📷 Image posted successfully! You can check it now.`,
+        url: firstUrl,
+      });
+      handleReset();
+    } else {
+      onUpdatePublishTask(taskId, {
+        status: "error",
+        message: errs.join(" · "),
+      });
+    }
+      } catch (err) {
+        onUpdatePublishTask(taskId, {
+          status: "error",
+          message: err instanceof Error ? err.message : "Publish failed",
+        });
+      }
+    })();
   };
 
   const hasCaption =
@@ -839,28 +1010,34 @@ export default function PostComposer({
           {/* Selectors */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Collection">
-              <select
+              <input
+                list="collection-list"
                 value={collection}
                 onChange={(e) => setCollection(e.target.value)}
-                className={SELECT_CLASSES}
+                placeholder="Type or select…"
+                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
                 style={INPUT_STYLE}
-              >
+              />
+              <datalist id="collection-list">
                 {collections.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c} value={c} />
                 ))}
-              </select>
+              </datalist>
             </Field>
             <Field label="Post type">
-              <select
+              <input
+                list="posttype-list"
                 value={postType}
                 onChange={(e) => setPostType(e.target.value)}
-                className={SELECT_CLASSES}
+                placeholder="Type or select…"
+                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
                 style={INPUT_STYLE}
-              >
+              />
+              <datalist id="posttype-list">
                 {postTypes.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t} />
                 ))}
-              </select>
+              </datalist>
             </Field>
           </div>
 
@@ -1037,48 +1214,19 @@ export default function PostComposer({
             </button>
             <button
               onClick={handlePublish}
-              disabled={publishing || !hasCaption || !hasMedia}
+              disabled={hasActiveTasks || !hasCaption || !hasMedia}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
               style={GRADIENT_BRAND}
             >
-              {publishing ? (
+              {hasActiveTasks ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Send className="size-4" />
               )}
-              {publishing ? "Publishing…" : "Approve & Publish"}
+              {hasActiveTasks ? "Publishing…" : "Approve & Publish"}
             </button>
           </div>
 
-          {publishResult && (
-            <div
-              className={cn(
-                "flex items-start gap-2 p-3 rounded-[2px] text-[13px] border",
-                publishResult.ok
-                  ? "bg-[var(--success-soft)] border-[var(--border-success-subtle)] text-[var(--fg-success)]"
-                  : "bg-[var(--danger-soft)] border-[var(--border-danger-subtle)] text-[var(--fg-danger)]"
-              )}
-            >
-              {publishResult.ok ? (
-                <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="size-4 shrink-0 mt-0.5" />
-              )}
-              <div className="min-w-0">
-                <p className="font-medium">{publishResult.message}</p>
-                {publishResult.url && (
-                  <a
-                    href={publishResult.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 mt-1 underline"
-                  >
-                    View post <ExternalLink className="size-3" />
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ============================================================ */}
@@ -1096,11 +1244,11 @@ export default function PostComposer({
                   <select
                     value={selectedPreviewId}
                     onChange={(e) => handlePreviewSwitch(e.target.value as PreviewOptionId)}
-                    className="appearance-none pl-3 pr-8 py-2 text-[13px] font-semibold rounded-[2px] focus:outline-none cursor-pointer text-white"
-                    style={{ ...GRADIENT_BRAND, border: "none" }}
+                    className="appearance-none pl-3 pr-8 py-2 text-[13px] font-semibold rounded-[2px] focus:outline-none cursor-pointer"
+                    style={{ ...GRADIENT_BRAND, border: "none", color: "#ffffff" }}
                   >
                     {previewOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id} className="text-[#111827] bg-white">
+                      <option key={opt.id} value={opt.id} style={{ color: "#111827", background: "#ffffff" }}>
                         {opt.isVideo ? "🎬 " : "📷 "}
                         {opt.label}
                       </option>
