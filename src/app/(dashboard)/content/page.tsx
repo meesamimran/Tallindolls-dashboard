@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import type { ScheduledPost } from "@/types/index";
 import { cn } from "@/lib/utils";
 import PostComposer, { type PublishTask } from "@/components/social/PostComposer";
+import { uploadToPublicUrl } from "@/lib/uploadMedia";
+import PreviewScreen from "@/components/social/PreviewScreen";
 import CarouselBuilder from "@/components/social/CarouselBuilder";
-import ApprovalQueue from "@/components/social/ApprovalQueue";
-import { publishPost } from "@/lib/publishPost";
-import { uploadToPublicUrl, isUploadConfigured } from "@/lib/uploadMedia";
-import { isVideoFile } from "@/lib/imageFormats";
-import { ImageIcon, Images, Send, Plus, Loader2, CheckCircle2, AlertCircle, ExternalLink, X } from "lucide-react";
-
-const CARD = "bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-[var(--shadow-xs)]";
-const GRADIENT_BRAND: React.CSSProperties = { background: "linear-gradient(135deg,#C8399C,#7C3AED)" };
+import type { Caption } from "@/components/social/SocialPreviews";
+import type { SongResult } from "@/components/social/SongSearch";
+import {
+  ImageIcon, Images, Loader2, CheckCircle2, AlertCircle, ExternalLink, X,
+} from "lucide-react";
 
 const COLLECTIONS = [
   "Summer Breeze", "Linen Luxe", "Evening Bloom", "Urban Edge",
@@ -24,37 +24,82 @@ const POST_TYPES = [
   "Styling Tips", "Customer Spotlight", "Seasonal Promotion",
 ];
 
+const GRADIENT_BRAND: React.CSSProperties = {
+  background: "linear-gradient(135deg, #C8399C 0%, #7C3AED 100%)",
+};
+
+// Convert stored plain-text caption back to Caption object
+function parseCaptionFromText(text: string): Caption {
+  const lines = text.split("\n").filter((l) => l.trim());
+  const headline = lines[0] || "";
+  const hashtagLines = lines.filter((l) => l.startsWith("#"));
+  const hashtags = hashtagLines.join(" ");
+  const bodyLines = lines.slice(1).filter((l) => !l.startsWith("#") && !l.startsWith("🎵"));
+  const primaryText = bodyLines.join("\n");
+  return { headline, primaryText, hashtags, cta: "" };
+}
+
 type ContentMode = "single" | "carousel";
+type Step = "composer" | "preview";
+
+// Persist posts to localStorage for History page
+function persistPost(post: ScheduledPost) {
+  try {
+    const stored = localStorage.getItem("published-posts");
+    const posts: ScheduledPost[] = stored ? JSON.parse(stored) : [];
+    posts.unshift(post);
+    localStorage.setItem("published-posts", JSON.stringify(posts.slice(0, 100)));
+  } catch { /* ignore */ }
+}
 
 export default function ContentPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<ContentMode>("single");
-  const [posts, setPosts] = useState<ScheduledPost[]>([]);
+  const [step, setStep] = useState<Step>("composer");
+
+  // Snapshot from composer step
+  const [snapshot, setSnapshot] = useState<{
+    imageSrc: string | null;
+    isVideo: boolean;
+    caption: Caption;
+    selectedPreviewLabel: string;
+    targetPlatforms: string[];
+  }>({
+    imageSrc: null,
+    isVideo: false,
+    caption: { headline: "", primaryText: "", hashtags: "", cta: "" },
+    selectedPreviewLabel: "Instagram Feed",
+    targetPlatforms: ["instagram", "facebook"],
+  });
+
+  // Success message + reset key
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
+  const [triggerPublish, setTriggerPublish] = useState(0);
+  const [publishingFromPreview, setPublishingFromPreview] = useState(false);
+  const processingRef = useRef<Set<string>>(new Set());
 
   // carousel state
   const [carouselSlides, setCarouselSlides] = useState<string[]>([]);
   const [carouselCaption, setCarouselCaption] = useState("");
-  const [carPublishing, setCarPublishing] = useState(false);
-  const [carPublishResult, setCarPublishResult] = useState<{ ok: boolean; message: string; url?: string } | null>(null);
   const [carTargetPlatforms, setCarTargetPlatforms] = useState<("instagram" | "facebook")[]>(["instagram", "facebook"]);
   const [pendingCarouselFiles, setPendingCarouselFiles] = useState<File[] | null>(null);
 
-  // ── Publish task queue (shared with PostComposer) ──
+  // ── Publish task queue ──
   const [publishTasks, setPublishTasks] = useState<PublishTask[]>([]);
+  const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const addPublishTask = useCallback((task: PublishTask) => {
     setPublishTasks((prev) => [task, ...prev]);
   }, []);
-
   const updatePublishTask = useCallback((id: string, update: Partial<PublishTask>) => {
     setPublishTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...update } : t)));
   }, []);
-
   const dismissPublishTask = useCallback((id: string) => {
     setPublishTasks((prev) => prev.filter((t) => t.id !== id));
   }, []);
+  const hasActiveTasks = publishTasks.some((t) => t.status === "processing");
 
-  // Auto-dismiss success toasts after 5 seconds
-  const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   useEffect(() => {
     publishTasks.forEach((task) => {
       if (task.status === "success" && !timersRef.current.has(task.id)) {
@@ -65,93 +110,136 @@ export default function ContentPage() {
         timersRef.current.set(task.id, timer);
       }
     });
-    // Cleanup stale timers
-    timersRef.current.forEach((timer, id) => {
-      if (!publishTasks.find((t) => t.id === id)) {
-        clearTimeout(timer);
-        timersRef.current.delete(id);
-      }
-    });
   }, [publishTasks, dismissPublishTask]);
 
-  const hasActiveTasks = publishTasks.some((t) => t.status === "processing");
+  // Read draft data from History (sessionStorage)
+  const [draftData] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = sessionStorage.getItem("edit-draft");
+      if (!raw) return null;
+      sessionStorage.removeItem("edit-draft");
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
 
-  const handleCreatePost = (post: ScheduledPost) => {
-    setPosts((prev) => [post, ...prev]);
-    setTimeout(() => document.getElementById("approval-workflow")?.scrollIntoView({ behavior: "smooth" }), 120);
-  };
-  const handleUpdateStatus = (id: string, status: ScheduledPost["status"]) =>
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
-  const handleRemove = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+  // Watch for publish completion when triggered from preview
+  useEffect(() => {
+    if (!publishingFromPreview) return;
+    const completed = publishTasks.find((t) => t.status !== "processing");
+    if (completed) {
+      setPublishingFromPreview(false);
+      if (completed.status === "success") {
+        setResetKey((k) => k + 1);
+        setStep("composer");
+        setSuccessMsg("Your post has been published successfully.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  }, [publishTasks, publishingFromPreview, setResetKey]);
 
-  const addDraft = (opts: { title: string; content: string; platform?: string; imageDataUrl?: string }) => {
-    handleCreatePost({
-      id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: opts.title, content: opts.content,
-      platform: opts.platform ?? "Instagram",
-      scheduledDate: new Date().toISOString(), status: "draft",
-      imageDataUrl: opts.imageDataUrl, surface: "feed",
-    });
-  };
+  // Auto-clear success message
+  useEffect(() => {
+    if (successMsg) {
+      const t = setTimeout(() => setSuccessMsg(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [successMsg]);
 
-  // ── Auto-switch: single → carousel on multi-upload ──
   const handleRequestCarousel = useCallback((files: File[]) => {
-    // check for video limit
     const vids = files.filter((f) => isVideoFile(f));
     if (vids.length > 1) { alert("Only 1 video allowed in a carousel."); return; }
     setMode("carousel");
     setPendingCarouselFiles(files);
   }, []);
 
-  // ── Carousel ──
   const handleCarouselReady = useCallback((slides: string[]) => setCarouselSlides(slides), []);
   const handleCarouselCaption = useCallback((caption: string) => setCarouselCaption(caption), []);
 
-  const carouselSaveDraft = () => {
-    if (carouselSlides.length < 2) return;
-    carouselSlides.forEach((dataUrl, i) => {
-      addDraft({
-        title: `Carousel ${i + 1}/${carouselSlides.length}`,
-        content: i === 0 ? carouselCaption || "Carousel post" : `Slide ${i + 1}`,
-        imageDataUrl: dataUrl,
-      });
-    });
-    setCarouselSlides([]); setCarouselCaption(""); setCarPublishResult(null);
-  };
+  // ── Two-step flow ──
+  const handleNext = useCallback((data: typeof snapshot) => {
+    setSnapshot(data);
+    setStep("preview");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
-  const carouselPublish = async () => {
-    if (carouselSlides.length < 2) return;
-    setCarPublishing(true); setCarPublishResult(null);
-    try {
-      if (!isUploadConfigured()) throw new Error("Cloudinary not configured.");
-      const urls: string[] = [];
-      for (const d of carouselSlides) urls.push(await uploadToPublicUrl(d));
-      let anyOk = false; let firstUrl: string | undefined; const msgs: string[] = [];
-      if (carTargetPlatforms.includes("instagram")) {
-        const res = await fetch("/api/publish/carousel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageUrls: urls, caption: carouselCaption || "" }) });
-        const json = await res.json();
-        if (res.ok && json.id) { anyOk = true; firstUrl = json.permalink; addDraft({ title: "Carousel (IG)", content: carouselCaption || `${carouselSlides.length} slides`, imageDataUrl: carouselSlides[0] }); msgs.push(`IG carousel — ${carouselSlides.length} slides live`); }
-        else msgs.push(`IG: ${json.error || "failed"}`);
-      }
-      if (carTargetPlatforms.includes("facebook")) {
-        let fbOk = 0;
-        for (let i = 0; i < urls.length; i++) {
-          const r = await publishPost({ platform: "facebook", surface: "feed", imageDataUrl: carouselSlides[i], captionText: i === 0 ? (carouselCaption || "Carousel") : `Slide ${i + 1}` });
-          if (r.ok) fbOk++;
+  const handleBack = useCallback(() => {
+    setStep("composer");
+  }, []);
+
+  // Save Draft → History
+  const handleSaveDraft = useCallback(() => {
+    const post: ScheduledPost = {
+      id: `draft-${Date.now()}`,
+      title: snapshot.caption.headline || "Draft Post",
+      content: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags, snapshot.caption.cta].filter(Boolean).join("\n\n"),
+      platform: snapshot.targetPlatforms.join(", "),
+      scheduledDate: new Date().toISOString(),
+      status: "draft",
+      imageDataUrl: snapshot.imageSrc ?? undefined,
+      surface: snapshot.isVideo ? "story" : "feed",
+    };
+    persistPost(post);
+    router.push("/history");
+  }, [snapshot, router]);
+
+  // Schedule → History with custom date
+  const handleSchedule = useCallback((song: SongResult | null, scheduledDate: string) => {
+    const post: ScheduledPost = {
+      id: `scheduled-${Date.now()}`,
+      title: snapshot.caption.headline || "Scheduled Post",
+      content: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags, snapshot.caption.cta].filter(Boolean).join("\n\n"),
+      platform: snapshot.targetPlatforms.join(", "),
+      scheduledDate,
+      status: "scheduled",
+      imageDataUrl: snapshot.imageSrc ?? undefined,
+      surface: snapshot.isVideo ? "story" : "feed",
+    };
+    if (song) post.content += `\n\n🎵 ${song.artistName} - ${song.songTitle}`;
+    persistPost(post);
+    router.push("/history");
+  }, [snapshot, router]);
+
+  // Publish → audio reel API if song selected, else regular publish
+  const handlePublish = useCallback((song: SongResult | null) => {
+    setPublishingFromPreview(true);
+
+    if (song && snapshot.imageSrc) {
+      const taskId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+      addPublishTask({ id: taskId, status: "processing", message: "🎬 Merging image + audio via FFmpeg…" });
+      (async () => {
+        try {
+          let imageUrl = snapshot.imageSrc!;
+          if (imageUrl.startsWith("data:")) imageUrl = await uploadToPublicUrl(imageUrl);
+          const res = await fetch("/api/publish/audio-reel", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl, audioUrl: song.audioUrl, audioName: `${song.artistName} - ${song.songTitle}`, caption: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n") }),
+          });
+          const json = await res.json();
+          if (json.ok) {
+            updatePublishTask(taskId, { status: "success", message: `🎬 Audio Reel posted with "${song.artistName} - ${song.songTitle}"! You can check it now.`, url: json.instagram?.permalink || json.facebook?.permalink });
+            persistPost({ id: `published-${Date.now()}`, title: snapshot.caption.headline || "Audio Reel", content: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n") + `\n\n🎵 ${song.artistName} - ${song.songTitle}`, platform: snapshot.targetPlatforms.join(", "), scheduledDate: new Date().toISOString(), status: "published", imageDataUrl: snapshot.imageSrc ?? undefined, surface: "story" } as ScheduledPost);
+          } else {
+            updatePublishTask(taskId, { status: "error", message: json.errors?.join(" · ") || "Audio reel publish failed" });
+          }
+        } catch (err) {
+          updatePublishTask(taskId, { status: "error", message: err instanceof Error ? err.message : "Audio reel error" });
         }
-        if (fbOk > 0) { anyOk = true; msgs.push(`FB: ${fbOk} slides posted`); } else msgs.push("FB: failed");
-      }
-      setCarPublishResult({ ok: anyOk, message: msgs.join(" · "), url: firstUrl });
-      if (anyOk) { setCarouselSlides([]); setCarouselCaption(""); }
-    } catch (err) {
-      setCarPublishResult({ ok: false, message: err instanceof Error ? err.message : "Publish failed" });
-    } finally { setCarPublishing(false); }
-  };
+      })();
+    } else {
+      setTriggerPublish((k) => k + 1);
+    }
+  }, [snapshot, addPublishTask, updatePublishTask]);
 
-  const toggleCar = <T,>(arr: T[], v: T): T[] => arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+  // Need isVideoFile for carousel
+  function isVideoFile(file: File): boolean {
+    return file.type.startsWith("video/");
+  }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 space-y-8">
+    <div className="max-w-[1200px] mx-auto px-6 space-y-6">
       <div>
         <h1 className="text-[28px] font-semibold text-[var(--heading)]">Content &amp; Posts</h1>
         <p className="text-[14px] text-[var(--body)] mt-1">
@@ -159,7 +247,18 @@ export default function ContentPage() {
         </p>
       </div>
 
-      {/* Mode hint */}
+      {/* Success Toast */}
+      {successMsg && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-[2px] bg-[var(--success)] text-white shadow-lg animate-fade-in">
+          <CheckCircle2 className="size-5 shrink-0" />
+          <p className="text-[14px] font-semibold flex-1">{successMsg}</p>
+          <button onClick={() => setSuccessMsg(null)} className="shrink-0 p-1 hover:bg-white/20 rounded-[2px] transition-colors">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Mode + Step indicator */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-medium"
           style={{ backgroundColor: mode === "single" ? "var(--brand-softer)" : "var(--neutral-secondary-medium)", color: mode === "single" ? "var(--brand)" : "var(--body-subtle)" }}>
@@ -177,72 +276,86 @@ export default function ContentPage() {
             ← Back to Single
           </button>
         )}
-        <span className="text-[11px] text-[var(--body-subtle)]">🎬 Video → auto reel · 📸 Multiple images → auto carousel</span>
+
+        {/* Step indicator */}
+        <div className="ml-auto flex items-center gap-2">
+          <span className={cn(
+            "px-2.5 py-1 text-[11px] font-semibold rounded-[2px]",
+            step === "composer" ? "text-white" : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)]"
+          )} style={step === "composer" ? GRADIENT_BRAND : undefined}>
+            1. Compose
+          </span>
+          <span className="text-[var(--body-subtle)]">→</span>
+          <span className={cn(
+            "px-2.5 py-1 text-[11px] font-semibold rounded-[2px]",
+            step === "preview" ? "text-white" : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)]"
+          )} style={step === "preview" ? GRADIENT_BRAND : undefined}>
+            2. Review &amp; Publish
+          </span>
+        </div>
       </div>
 
-      {/* Active content */}
-      {mode === "single" && (
+      {/* Step Content — both screens stay mounted to preserve state */}
+      <div className={step === "composer" ? "" : "hidden"}>
         <PostComposer
           collections={COLLECTIONS}
           postTypes={POST_TYPES}
-          onCreatePost={handleCreatePost}
+          onCreatePost={() => {}}
           onRequestCarousel={handleRequestCarousel}
           publishTasks={publishTasks}
           onAddPublishTask={addPublishTask}
           onUpdatePublishTask={updatePublishTask}
           onDismissPublishTask={dismissPublishTask}
           hasActiveTasks={hasActiveTasks}
+          mode="edit"
+          onNext={handleNext}
+          resetKey={resetKey}
+          triggerPublish={triggerPublish}
+          initialDraft={
+            draftData
+              ? {
+                  caption: draftData.caption
+                    ? parseCaptionFromText(draftData.caption)
+                    : undefined,
+                  imageDataUrl: draftData.imageDataUrl || undefined,
+                  platform: draftData.platform,
+                  surface: draftData.surface,
+                }
+              : undefined
+          }
         />
-      )}
+      </div>
 
-      {mode === "carousel" && (
-        <div className="space-y-4">
-          <CarouselBuilder onCarouselReady={handleCarouselReady} onCaptionReady={handleCarouselCaption}
-            initialFiles={pendingCarouselFiles} onFilesConsumed={() => setPendingCarouselFiles(null)} />
-          {carouselSlides.length >= 2 && (
-            <div className={cn(CARD, "p-4 space-y-3")}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[12px] font-semibold text-[var(--heading)]">Publish to:</span>
-                {(["instagram", "facebook"] as const).map((p) => {
-                  const on = carTargetPlatforms.includes(p);
-                  return <button key={p} onClick={() => setCarTargetPlatforms((prev) => toggleCar(prev, p))}
-                    className={cn("px-3 py-1.5 text-[13px] font-medium rounded-[2px] border capitalize", on ? "text-white border-transparent" : "text-[var(--body-subtle)] border-[var(--border-default)]")}
-                    style={on ? GRADIENT_BRAND : undefined}>{p}</button>;
-                })}
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={carouselSaveDraft}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)]"><Plus className="size-3.5" /> Save Draft</button>
-                <button onClick={carouselPublish} disabled={carPublishing}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded-[2px] disabled:opacity-60" style={GRADIENT_BRAND}>
-                  {carPublishing ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} Approve &amp; Publish</button>
-              </div>
-              {carPublishResult && (
-                <div className={cn("flex items-start gap-2 p-3 rounded-[2px] text-[13px] border", carPublishResult.ok ? "bg-[var(--success-soft)] border-[var(--border-success-subtle)] text-[var(--fg-success)]" : "bg-[var(--danger-soft)] border-[var(--border-danger-subtle)] text-[var(--fg-danger)]")}>
-                  {carPublishResult.ok ? <CheckCircle2 className="size-4 shrink-0 mt-0.5" /> : <AlertCircle className="size-4 shrink-0 mt-0.5" />}
-                  <div className="min-w-0"><p className="font-medium">{carPublishResult.message}</p>{carPublishResult.url && <a href={carPublishResult.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-1 underline">View <ExternalLink className="size-3" /></a>}</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <div className={step === "preview" ? "" : "hidden"}>
+        <PreviewScreen
+          imageSrc={snapshot.imageSrc}
+          isVideo={snapshot.isVideo}
+          caption={snapshot.caption}
+          selectedPreviewLabel={snapshot.selectedPreviewLabel}
+          targetPlatforms={snapshot.targetPlatforms}
+          platform={snapshot.selectedPreviewLabel.includes("Facebook") ? "facebook" : "instagram"}
+          surface={snapshot.isVideo ? "story" : "feed"}
+          hasActiveTasks={hasActiveTasks || publishingFromPreview}
+          isPublishing={publishingFromPreview}
+          onPublish={handlePublish}
+          onSchedule={handleSchedule}
+          onSaveDraft={handleSaveDraft}
+          onBack={handleBack}
+        />
+      </div>
 
       {/* ── Publish Status ── */}
       {publishTasks.length > 0 && (
         <div className="space-y-2">
           {publishTasks.map((task) => (
-            <div
-              key={task.id}
-              className={cn(
-                "flex items-center gap-3 pl-4 pr-2 py-3 rounded-[2px] animate-fade-in",
-                task.status === "processing"
-                  ? "bg-[var(--neutral-primary-soft)] border-l-[3px] border-l-[var(--brand)]"
-                  : task.status === "success"
-                    ? "bg-[var(--success)] text-white"
-                    : "bg-[var(--danger)] text-white"
-              )}
-            >
+            <div key={task.id} className={cn(
+              "flex items-center gap-3 pl-4 pr-2 py-3 rounded-[2px] animate-fade-in",
+              task.status === "processing"
+                ? "bg-[var(--neutral-primary-soft)] border-l-[3px] border-l-[var(--brand)]"
+                : task.status === "success"
+                  ? "bg-[var(--success)] text-white"
+                  : "bg-[var(--danger)] text-white"
+            )}>
               {task.status === "processing" ? (
                 <Loader2 className="size-4 text-[var(--brand)] animate-spin shrink-0" />
               ) : task.status === "success" ? (
@@ -253,31 +366,20 @@ export default function ContentPage() {
               <p className="text-[13px] font-medium flex-1 leading-snug">{task.message}</p>
               {task.url && (
                 <a href={task.url} target="_blank" rel="noopener noreferrer"
-                  className={cn(
-                    "shrink-0 text-[12px] font-semibold px-2 py-1 rounded-[2px] transition-colors",
-                    task.status === "success" ? "bg-white/20 hover:bg-white/30 text-white"
-                      : task.status === "error" ? "bg-white/20 hover:bg-white/30 text-white"
-                      : "bg-[var(--brand-softer)] hover:bg-[var(--brand-soft)] text-[var(--brand)]"
-                  )}>
+                  className="shrink-0 text-[12px] font-semibold px-2 py-1 rounded-[2px] bg-white/20 hover:bg-white/30 text-white transition-colors">
                   View
                 </a>
               )}
-              <button onClick={() => dismissPublishTask(task.id)}
-                className={cn(
-                  "shrink-0 p-1 rounded-[2px] transition-colors",
-                  task.status === "processing" ? "hover:bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)]"
-                    : "hover:bg-white/20 text-white/70 hover:text-white"
-                )}>
-                <X className="size-3.5" />
-              </button>
+              {task.status !== "processing" && (
+                <button onClick={() => dismissPublishTask(task.id)}
+                  className="shrink-0 p-1 rounded-[2px] hover:bg-white/20 text-white/70 hover:text-white transition-colors">
+                  <X className="size-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
-
-      <div id="approval-workflow" className="scroll-mt-6">
-        <ApprovalQueue posts={posts} onUpdate={handleUpdateStatus} onRemove={handleRemove} />
-      </div>
     </div>
   );
 }

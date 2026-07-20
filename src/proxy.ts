@@ -25,8 +25,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow the content page itself
-  if (pathname === "/content" || pathname === "/") {
+  // Allow the content page + audio-reel page
+  if (pathname === "/content" || pathname === "/audio-reel" || pathname === "/history" || pathname === "/") {
     // Redirect root to /content
     if (pathname === "/") {
       return NextResponse.redirect(new URL("/content", request.url));

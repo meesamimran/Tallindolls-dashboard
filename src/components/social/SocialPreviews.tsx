@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  Pause,
   Music2,
   Home,
   Search,
@@ -632,6 +633,9 @@ function InstagramFeedPost({
   carouselIdx,
   onCarouselPrev,
   onCarouselNext,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   caption: Caption;
   imageSrc: string | null;
@@ -643,6 +647,9 @@ function InstagramFeedPost({
   carouselIdx?: number;
   onCarouselPrev?: () => void;
   onCarouselNext?: () => void;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   const captionText = [caption.primaryText, caption.hashtags]
     .filter(Boolean)
@@ -681,6 +688,25 @@ function InstagramFeedPost({
             </p>
             {sponsored && (
               <p className="text-[11px] text-[#8e8e8e]">Sponsored</p>
+            )}
+            {audioName && (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[12px] text-[#262626] font-medium truncate">
+                  ♪ {audioName}
+                </span>
+                {onAudioPlay && (
+                  <button
+                    onClick={onAudioPlay}
+                    className="shrink-0 size-5 rounded-full bg-[#f0f0f0] flex items-center justify-center hover:bg-[#e0e0e0] transition-colors"
+                  >
+                    {isAudioPlaying ? (
+                      <Pause className="size-2.5 text-[#262626]" />
+                    ) : (
+                      <Play className="size-2.5 text-[#262626] ml-[1px]" />
+                    )}
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <MoreHorizontal className="size-5 text-[#262626] cursor-pointer" />
@@ -1167,6 +1193,9 @@ export function FeedPreview({
   carouselIdx,
   onCarouselPrev,
   onCarouselNext,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   platform: SocialPlatform;
   device: PreviewDevice;
@@ -1178,6 +1207,9 @@ export function FeedPreview({
   carouselIdx?: number;
   onCarouselPrev?: () => void;
   onCarouselNext?: () => void;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   if (platform === "facebook") {
     return (
@@ -1205,6 +1237,9 @@ export function FeedPreview({
       carouselIdx={carouselIdx}
       onCarouselPrev={onCarouselPrev}
       onCarouselNext={onCarouselNext}
+      audioName={audioName}
+      onAudioPlay={onAudioPlay}
+      isAudioPlaying={isAudioPlaying}
     />
   );
 }
@@ -1215,12 +1250,18 @@ export function StoryPreview({
   imageSrc,
   isVideo,
   videoSrc,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   platform: SocialPlatform;
   caption: Caption;
   imageSrc: string | null;
   isVideo?: boolean;
   videoSrc?: string | null;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   if (platform === "facebook") {
     return (

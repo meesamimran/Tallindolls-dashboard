@@ -125,6 +125,27 @@ interface PostComposerProps {
   onUpdatePublishTask: (id: string, update: Partial<PublishTask>) => void;
   onDismissPublishTask: (id: string) => void;
   hasActiveTasks: boolean;
+  // Two-step mode
+  mode?: "edit" | "preview";
+  onNext?: (data: {
+    imageSrc: string | null;
+    isVideo: boolean;
+    caption: Caption;
+    selectedPreviewLabel: string;
+    targetPlatforms: string[];
+  }) => void;
+  onBack?: () => void;
+  // Pre-fill from draft (when editing from History)
+  initialDraft?: {
+    caption?: Caption;
+    imageDataUrl?: string;
+    platform?: string;
+    surface?: string;
+  };
+  // Increment to force a full reset of all composer state
+  resetKey?: number;
+  // Increment to trigger publish from outside (PreviewScreen)
+  triggerPublish?: number;
 }
 
 export default function PostComposer({
@@ -137,6 +158,12 @@ export default function PostComposer({
   onUpdatePublishTask,
   onDismissPublishTask,
   hasActiveTasks,
+  mode = "edit",
+  onNext,
+  onBack,
+  initialDraft,
+  resetKey,
+  triggerPublish,
 }: PostComposerProps) {
   // ── Media state ──
   const [mediaFiles, setMediaFiles] = useState<MediaFileEntry[]>([]);
@@ -213,6 +240,53 @@ export default function PostComposer({
     if (surface === "story") setActiveFormatKey("story");
     else setActiveFormatKey("square");
   }, [surface]);
+
+  // ── Pre-fill from draft (edit from History) ──
+  useEffect(() => {
+    if (!initialDraft) return;
+    if (initialDraft.caption) {
+      setCaption(initialDraft.caption);
+    }
+    // Load draft image if available
+    if (initialDraft.imageDataUrl && !mediaFiles.length) {
+      const dataUrl = initialDraft.imageDataUrl;
+      // Create a mock FileEntry for the pre-existing image
+      const id = `draft-${Date.now()}`;
+      setMediaFiles([
+        {
+          id,
+          file: new File([], "draft-image.jpg", { type: "image/jpeg" }),
+          dataUrl,
+          isVideo: false,
+          crops: {},
+        },
+      ]);
+      // Load image for preview
+      (async () => {
+        try {
+          const img = await loadImage(dataUrl);
+          imgElRef.current = img;
+        } catch { /* */ }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraft?.imageDataUrl]);
+
+  // ── Full reset when resetKey changes (after successful publish) ──
+  useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      handleReset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
+  // ── Trigger publish from outside (PreviewScreen) ──
+  useEffect(() => {
+    if (triggerPublish !== undefined && triggerPublish > 0 && hasMedia) {
+      handlePublish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerPublish]);
 
   // ── Auto-switch to video preview on video upload ──
   useEffect(() => {
@@ -584,8 +658,12 @@ export default function PostComposer({
     }
   };
 
+  // Strip label prefixes that might leak from AI response or manual input
+  const cleanField = (s: string) =>
+    s.replace(/^(headline|primary\s*text|body\s*text|body|copy|hashtags|cta|call\s*to\s*action):?\s*/i, "").trim();
+
   const captionText = () =>
-    [caption.headline, caption.primaryText, caption.hashtags, caption.cta]
+    [cleanField(caption.headline), cleanField(caption.primaryText), caption.hashtags, cleanField(caption.cta)]
       .filter(Boolean)
       .join("\n\n");
 
@@ -1212,19 +1290,39 @@ export default function PostComposer({
               <Plus className="size-4" />
               Save Draft
             </button>
-            <button
-              onClick={handlePublish}
-              disabled={hasActiveTasks || !hasCaption || !hasMedia}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={GRADIENT_BRAND}
-            >
-              {hasActiveTasks ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-              {hasActiveTasks ? "Publishing…" : "Approve & Publish"}
-            </button>
+            {onNext ? (
+              <button
+                onClick={() =>
+                  onNext({
+                    imageSrc: previewImage,
+                    isVideo,
+                    caption,
+                    selectedPreviewLabel: selectedPreview.label,
+                    targetPlatforms,
+                  })
+                }
+                disabled={!hasMedia}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={GRADIENT_BRAND}
+              >
+                Next → Preview
+              </button>
+            ) : (
+              <button
+                onClick={handlePublish}
+                disabled={hasActiveTasks || !hasCaption || !hasMedia}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={GRADIENT_BRAND}
+                id="publish-trigger"
+              >
+                {hasActiveTasks ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {hasActiveTasks ? "Publishing…" : "Approve & Publish"}
+              </button>
+            )}
           </div>
 
         </div>
@@ -1240,22 +1338,12 @@ export default function PostComposer({
                 <span className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
                   Preview
                 </span>
-                <div className="relative">
-                  <select
-                    value={selectedPreviewId}
-                    onChange={(e) => handlePreviewSwitch(e.target.value as PreviewOptionId)}
-                    className="appearance-none pl-3 pr-8 py-2 text-[13px] font-semibold rounded-[2px] focus:outline-none cursor-pointer"
-                    style={{ ...GRADIENT_BRAND, border: "none", color: "#ffffff" }}
-                  >
-                    {previewOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id} style={{ color: "#111827", background: "#ffffff" }}>
-                        {opt.isVideo ? "🎬 " : "📷 "}
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-4 text-white pointer-events-none" />
-                </div>
+                {/* Custom dropdown — reliable cross-browser styling */}
+                <PreviewDropdown
+                  options={previewOptions}
+                  value={selectedPreviewId}
+                  onChange={handlePreviewSwitch}
+                />
               </div>
 
               {/* Device toggle (feed previews only) */}
@@ -1387,6 +1475,65 @@ export default function PostComposer({
 }
 
 // ── Utility: form field wrapper ──
+
+// ── Custom Preview Dropdown (reliable cross-browser styling) ──
+
+function PreviewDropdown({
+  options,
+  value,
+  onChange,
+}: {
+  options: PreviewOption[];
+  value: string;
+  onChange: (id: PreviewOptionId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.id === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 pl-3 pr-2 py-2 text-[13px] font-semibold rounded-[2px] text-white transition-opacity hover:opacity-90"
+        style={GRADIENT_BRAND}
+      >
+        {selected?.isVideo ? "🎬 " : "📷 "}
+        {selected?.label || "Select"}
+        <ChevronDown className="size-4" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-[260px] bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-xl overflow-hidden">
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => {
+                onChange(opt.id);
+                setOpen(false);
+              }}
+              className={cn(
+                "w-full text-left px-3 py-2.5 text-[13px] font-medium transition-colors flex items-center gap-2",
+                opt.id === value
+                  ? "bg-[var(--brand-softer)] text-[var(--brand)]"
+                  : "text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)]"
+              )}
+            >
+              {opt.isVideo ? "🎬" : "📷"} {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
