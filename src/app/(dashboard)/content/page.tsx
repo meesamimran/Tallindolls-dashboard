@@ -63,12 +63,14 @@ export default function ContentPage() {
     isVideo: boolean;
     caption: Caption;
     selectedPreviewLabel: string;
+    surface: string;
     targetPlatforms: string[];
   }>({
     imageSrc: null,
     isVideo: false,
     caption: { headline: "", primaryText: "", hashtags: "", cta: "" },
     selectedPreviewLabel: "Instagram Feed",
+    surface: "feed",
     targetPlatforms: ["instagram", "facebook"],
   });
 
@@ -208,18 +210,39 @@ export default function ContentPage() {
 
     if (song && snapshot.imageSrc) {
       const taskId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-      addPublishTask({ id: taskId, status: "processing", message: "🎬 Merging image + audio via FFmpeg…" });
+      addPublishTask({ id: taskId, status: "processing", message: "🎬 Downloading audio & merging…" });
       (async () => {
         try {
           let imageUrl = snapshot.imageSrc!;
           if (imageUrl.startsWith("data:")) imageUrl = await uploadToPublicUrl(imageUrl);
+
+          // Download audio client-side (fresh Deezer token) then upload to Cloudinary
+          updatePublishTask(taskId, { message: "🎬 Downloading audio track…" });
+          const audioBlob = await fetch(song.audioUrl).then((r) => r.blob());
+          const audioForm = new FormData();
+          audioForm.append("file", audioBlob, "audio.mp3");
+          audioForm.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
+          const audioUp = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/raw/upload`, { method: "POST", body: audioForm });
+          const audioUpJson = await audioUp.json();
+          if (!audioUpJson.secure_url) throw new Error("Audio upload failed");
+          const cloudAudioUrl = audioUpJson.secure_url;
+
+          updatePublishTask(taskId, { message: "🎬 Merging image + audio via FFmpeg…" });
           const res = await fetch("/api/publish/audio-reel", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl, audioUrl: song.audioUrl, audioName: `${song.artistName} - ${song.songTitle}`, caption: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n") }),
+            body: JSON.stringify({ imageUrl, audioUrl: cloudAudioUrl, audioName: `${song.artistName} - ${song.songTitle}`, caption: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n"), targetPlatforms: snapshot.targetPlatforms }),
           });
           const json = await res.json();
           if (json.ok) {
-            updatePublishTask(taskId, { status: "success", message: `🎬 Audio Reel posted with "${song.artistName} - ${song.songTitle}"! You can check it now.`, url: json.instagram?.permalink || json.facebook?.permalink });
+            const platforms: string[] = [];
+            if (json.instagram) platforms.push("Instagram");
+            if (json.facebook) platforms.push("Facebook");
+            const msg = `🎬 Audio Reel posted to ${platforms.join(" & ")} with "${song.artistName} - ${song.songTitle}"!`;
+            if (json.errors?.length) {
+              updatePublishTask(taskId, { status: "success", message: msg + ` (Note: ${json.errors.join(", ")})`, url: json.instagram?.permalink || json.facebook?.permalink });
+            } else {
+              updatePublishTask(taskId, { status: "success", message: msg + " You can check it now.", url: json.instagram?.permalink || json.facebook?.permalink });
+            }
             persistPost({ id: `published-${Date.now()}`, title: snapshot.caption.headline || "Audio Reel", content: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n") + `\n\n🎵 ${song.artistName} - ${song.songTitle}`, platform: snapshot.targetPlatforms.join(", "), scheduledDate: new Date().toISOString(), status: "published", imageDataUrl: snapshot.imageSrc ?? undefined, surface: "story" } as ScheduledPost);
           } else {
             updatePublishTask(taskId, { status: "error", message: json.errors?.join(" · ") || "Audio reel publish failed" });
@@ -300,7 +323,7 @@ export default function ContentPage() {
         <PostComposer
           collections={COLLECTIONS}
           postTypes={POST_TYPES}
-          onCreatePost={() => {}}
+          onCreatePost={(post) => { persistPost(post); }}
           onRequestCarousel={handleRequestCarousel}
           publishTasks={publishTasks}
           onAddPublishTask={addPublishTask}
@@ -333,8 +356,14 @@ export default function ContentPage() {
           caption={snapshot.caption}
           selectedPreviewLabel={snapshot.selectedPreviewLabel}
           targetPlatforms={snapshot.targetPlatforms}
-          platform={snapshot.selectedPreviewLabel.includes("Facebook") ? "facebook" : "instagram"}
-          surface={snapshot.isVideo ? "story" : "feed"}
+          platform={
+            snapshot.targetPlatforms.includes("facebook") && !snapshot.targetPlatforms.includes("instagram")
+              ? "facebook"
+              : snapshot.targetPlatforms.includes("instagram") && !snapshot.targetPlatforms.includes("facebook")
+                ? "instagram"
+                : snapshot.selectedPreviewLabel.includes("Facebook") ? "facebook" : "instagram"
+          }
+          surface={snapshot.surface as "feed" | "story"}
           hasActiveTasks={hasActiveTasks || publishingFromPreview}
           isPublishing={publishingFromPreview}
           onPublish={handlePublish}

@@ -49,6 +49,8 @@ export interface AudioReelConfig {
   fbPageId: string;
   /** Facebook Page access token */
   fbPageToken: string;
+  /** Only publish to these platforms. Default: both */
+  targetPlatforms?: ("instagram" | "facebook")[];
 }
 
 export interface AudioReelResult {
@@ -316,74 +318,65 @@ async function publishFacebookReel(params: {
 }): Promise<{ id: string; permalink: string }> {
   const { videoPath, caption, fbPageId, pageToken } = params;
 
-  // Phase 1: Start upload session
-  const startRes = await fetch(
-    `${GRAPH}/${GRAPH_VERSION}/${fbPageId}/video_reels`,
-    {
-      method: "POST",
-      body: new URLSearchParams({
-        access_token: pageToken,
-        upload_phase: "start",
-      }),
-    }
-  );
-  const startJson = await startRes.json();
-  if (!startRes.ok) {
-    // video_reels may fail due to permissions → fallback to /videos
-    if (startJson?.error?.code === 200 || startJson?.error?.type === "OAuthException") {
-      return publishFacebookVideoFallback({ videoPath, caption, fbPageId, pageToken });
-    }
-    throw new Error(
-      `FB reel start failed: ${startJson?.error?.message || startRes.status}`
+  // video_reels often fails due to permissions → fallback to /videos
+  try {
+    // Phase 1: Start upload session
+    const startRes = await fetch(
+      `${GRAPH}/${GRAPH_VERSION}/${fbPageId}/video_reels`,
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          access_token: pageToken,
+          upload_phase: "start",
+        }),
+      }
     );
-  }
+    const startJson = await startRes.json();
+    if (!startRes.ok || !startJson.video_id || !startJson.upload_url) {
+      throw new Error(startJson?.error?.message || "video_reels start failed");
+    }
 
-  const { video_id, upload_url } = startJson;
-  if (!video_id || !upload_url) {
-    // No upload_url → use fallback
+    const { video_id, upload_url } = startJson;
+
+    // Phase 2: Upload video binary
+    const videoBuffer = await readFile(videoPath);
+    const uploadRes = await fetch(upload_url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(videoBuffer.byteLength),
+      },
+      body: videoBuffer,
+    });
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`FB reel upload failed: ${errText.slice(0, 200)}`);
+    }
+
+    // Phase 3: Finish and publish
+    const params_ = new URLSearchParams({
+      access_token: pageToken,
+      video_id,
+      upload_phase: "finish",
+      video_state: "PUBLISHED",
+    });
+    if (caption) params_.append("description", caption);
+    const finishRes = await fetch(
+      `${GRAPH}/${GRAPH_VERSION}/${fbPageId}/video_reels`,
+      { method: "POST", body: params_ }
+    );
+    const finishJson = await finishRes.json();
+    if (!finishRes.ok) throw new Error(finishJson?.error?.message || "video_reels finish failed");
+
+    return {
+      id: finishJson.id || finishJson.video_id || video_id,
+      permalink: `https://www.facebook.com/${fbPageId}`,
+    };
+  } catch {
+    // video_reels failed — fallback to simple /videos endpoint
+    console.log("video_reels failed, using /videos fallback for Facebook");
     return publishFacebookVideoFallback({ videoPath, caption, fbPageId, pageToken });
   }
-
-  // Phase 2: Upload video binary
-  const videoBuffer = await readFile(videoPath);
-
-  const uploadRes = await fetch(upload_url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(videoBuffer.byteLength),
-    },
-    body: videoBuffer,
-  });
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text();
-    throw new Error(`FB reel upload failed: ${errText.slice(0, 200)}`);
-  }
-
-  // Phase 3: Finish and publish
-  const params_ = new URLSearchParams({
-    access_token: pageToken,
-    video_id,
-    upload_phase: "finish",
-    video_state: "PUBLISHED",
-  });
-  if (caption) params_.append("description", caption);
-
-  const finishRes = await fetch(
-    `${GRAPH}/${GRAPH_VERSION}/${fbPageId}/video_reels`,
-    { method: "POST", body: params_ }
-  );
-  const finishJson = await finishRes.json();
-  if (!finishRes.ok) {
-    throw new Error(
-      `FB reel finish failed: ${finishJson?.error?.message || finishRes.status}`
-    );
-  }
-
-  return {
-    id: finishJson.id || finishJson.video_id || video_id,
-    permalink: `https://www.facebook.com/${fbPageId}`,
-  };
 }
 
 // ── Fallback: Facebook /videos endpoint (when video_reels not available) ──
@@ -490,26 +483,42 @@ export async function publishAudioReel(
     // 3) Upload merged video to Cloudinary for public URL
     const publicVideoUrl = await uploadToCloudinary(videoPath);
 
-    // 4) Publish to both platforms in parallel
+    // 4) Publish to selected platforms in parallel
+    const platforms = config.targetPlatforms || ["instagram", "facebook"];
     const fbDescription = [config.caption, `🎵 ${audioName}`]
       .filter(Boolean)
       .join("\n\n");
 
-    const [igResult, fbResult] = await Promise.allSettled([
-      publishInstagramReel({
-        videoUrl: publicVideoUrl,
-        audioName, // ← Custom audio title from Deezer/input
-        caption: config.caption,
-        igUserId: config.igUserId,
-        token: config.userToken,
-      }),
-      publishFacebookReel({
-        videoPath,
-        caption: fbDescription,
-        fbPageId: config.fbPageId,
-        pageToken: config.fbPageToken,
-      }),
-    ]);
+    const tasks: Promise<any>[] = [];
+    const taskLabels: string[] = [];
+
+    if (platforms.includes("instagram")) {
+      taskLabels.push("instagram");
+      tasks.push(
+        publishInstagramReel({
+          videoUrl: publicVideoUrl,
+          audioName,
+          caption: config.caption,
+          igUserId: config.igUserId,
+          token: config.userToken,
+        })
+      );
+    }
+    if (platforms.includes("facebook")) {
+      taskLabels.push("facebook");
+      tasks.push(
+        publishFacebookReel({
+          videoPath,
+          caption: fbDescription,
+          fbPageId: config.fbPageId,
+          pageToken: config.fbPageToken,
+        })
+      );
+    }
+
+    const results = await Promise.allSettled(tasks);
+    const igResult = taskLabels.indexOf("instagram") >= 0 ? results[taskLabels.indexOf("instagram")] : null;
+    const fbResult = taskLabels.indexOf("facebook") >= 0 ? results[taskLabels.indexOf("facebook")] : null;
 
     // 5) Cleanup temp files
     await cleanup(imagePath, audioPath, videoPath);
@@ -522,18 +531,21 @@ export async function publishAudioReel(
       videoUrl: publicVideoUrl,
     };
 
-    if (igResult.status === "fulfilled") {
-      result.instagram = igResult.value;
-      result.ok = true;
-    } else {
-      errors.push(`Instagram: ${igResult.reason?.message || igResult.reason}`);
+    if (igResult) {
+      if (igResult.status === "fulfilled") {
+        result.instagram = igResult.value;
+        result.ok = true;
+      } else {
+        errors.push(`Instagram: ${igResult.reason?.message || igResult.reason}`);
+      }
     }
-
-    if (fbResult.status === "fulfilled") {
-      result.facebook = fbResult.value;
-      result.ok = true;
-    } else {
-      errors.push(`Facebook: ${fbResult.reason?.message || fbResult.reason}`);
+    if (fbResult) {
+      if (fbResult.status === "fulfilled") {
+        result.facebook = fbResult.value;
+        result.ok = true;
+      } else {
+        errors.push(`Facebook: ${fbResult.reason?.message || fbResult.reason}`);
+      }
     }
 
     result.videoUrl = publicVideoUrl;

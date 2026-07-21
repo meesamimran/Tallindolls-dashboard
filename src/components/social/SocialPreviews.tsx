@@ -74,7 +74,9 @@ function Avatar({ size = 40, ring = false }: { size?: number; ring?: boolean }) 
 }
 
 function formatCaption(caption: Caption): string {
-  return [caption.primaryText, caption.hashtags].filter(Boolean).join("\n\n");
+  return [caption.headline, caption.primaryText, caption.hashtags, caption.cta]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ============================================================
@@ -352,6 +354,9 @@ function FacebookFeedPost({
   carouselIdx,
   onCarouselPrev,
   onCarouselNext,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   caption: Caption;
   imageSrc: string | null;
@@ -363,6 +368,9 @@ function FacebookFeedPost({
   carouselIdx?: number;
   onCarouselPrev?: () => void;
   onCarouselNext?: () => void;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   const body = formatCaption(caption);
   const edgeToEdge = device === "mobile";
@@ -403,6 +411,17 @@ function FacebookFeedPost({
               <span>·</span>
               <Globe className="size-3 text-[#65676b]" />
             </div>
+            {audioName && (
+              <div className="flex items-center gap-2 mt-0.5">
+                <Music2 className="size-3.5 text-[#65676b] shrink-0" />
+                <span className="text-[12px] text-[#65676b] font-medium truncate">{audioName}</span>
+                {onAudioPlay && (
+                  <button onClick={onAudioPlay} className="shrink-0 size-5 rounded-full bg-[#e4e6eb] flex items-center justify-center hover:bg-[#d8d9dc] transition-colors">
+                    {isAudioPlaying ? <Pause className="size-2.5 text-[#050505]" /> : <Play className="size-2.5 text-[#050505] ml-[1px]" />}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <MoreHorizontal className="size-5 text-[#65676b] cursor-pointer" />
         </div>
@@ -1040,16 +1059,23 @@ function InstagramReelPost({
   imageSrc,
   isVideo,
   videoSrc,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   caption: Caption;
   imageSrc: string | null;
   isVideo?: boolean;
   videoSrc?: string | null;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   const [muted, setMuted] = useState(true);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const body = formatCaption(caption);
+  const hasCaption = Boolean(body);
 
   return (
     <PhoneFrame platform="instagram">
@@ -1090,6 +1116,10 @@ function InstagramReelPost({
             Reels
           </span>
           <ChevronRight className="size-4 text-white/80" />
+          {/* Camera/upload button (IG style) */}
+          <div className="ml-auto size-8 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
+            <Film className="size-4 text-white" />
+          </div>
         </div>
 
         {/* Bottom gradient */}
@@ -1097,36 +1127,30 @@ function InstagramReelPost({
 
         {/* Right action buttons */}
         <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10">
-          <button
-            onClick={() => setLiked(!liked)}
-            className="flex flex-col items-center gap-1"
-          >
-            <Heart
-              className={cn(
-                "size-7 drop-shadow transition-colors",
-                liked ? "fill-[#ed4956] text-[#ed4956]" : "text-white"
-              )}
-            />
+          <button onClick={() => setLiked(!liked)} className="flex flex-col items-center gap-1 group">
+            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
+              <Heart className={cn("size-6 drop-shadow transition-colors", liked ? "fill-[#ed4956] text-[#ed4956]" : "text-white")} />
+            </div>
             <span className="text-[12px] text-white font-medium">1.2K</span>
           </button>
-          <button className="flex flex-col items-center gap-1">
-            <MessageCircle className="size-7 text-white drop-shadow" />
+          <button className="flex flex-col items-center gap-1 group">
+            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
+              <MessageCircle className="size-6 text-white drop-shadow" />
+            </div>
             <span className="text-[12px] text-white font-medium">84</span>
           </button>
-          <button className="flex flex-col items-center gap-1">
-            <Send className="size-6 text-white drop-shadow" />
+          <button className="flex flex-col items-center gap-1 group">
+            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
+              <Send className="size-5 text-white drop-shadow" />
+            </div>
           </button>
-          <button
-            onClick={() => setSaved(!saved)}
-            className="flex flex-col items-center gap-1"
-          >
-            <Bookmark
-              className={cn(
-                "size-6 drop-shadow transition-colors",
-                saved ? "fill-white text-white" : "text-white"
-              )}
-            />
-          </button>
+          <div className="mt-2">
+            <button onClick={() => setSaved(!saved)} className="flex flex-col items-center gap-1 group">
+              <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
+                <Bookmark className={cn("size-5 drop-shadow transition-colors", saved ? "fill-white text-white" : "text-white")} />
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* Mute button */}
@@ -1135,30 +1159,38 @@ function InstagramReelPost({
             onClick={() => setMuted(!muted)}
             className="absolute bottom-24 left-3 size-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center z-10"
           >
-            {muted ? (
-              <VolumeX className="size-4 text-white" />
-            ) : (
-              <Volume2 className="size-4 text-white" />
-            )}
+            {muted ? <VolumeX className="size-4 text-white" /> : <Volume2 className="size-4 text-white" />}
           </button>
         )}
 
-        {/* Bottom info */}
-        <div className="absolute inset-x-4 bottom-14 z-10 max-w-[75%]">
+        {/* Bottom info — dynamic based on caption */}
+        <div className="absolute inset-x-4 z-10 max-w-[75%]" style={{ bottom: audioName || hasCaption ? "3.5rem" : "4.5rem" }}>
           <p className="text-[14px] text-white font-semibold drop-shadow flex items-center gap-1">
             {BRAND_HANDLE}
-            <span className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#0095f6] text-white text-[8px]">
-              ✓
-            </span>
+            <span className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#0095f6] text-white text-[8px]">✓</span>
+            <span className="text-[12px] text-white/70 font-normal ml-1">· 2h ago</span>
           </p>
-          {body && (
-            <p className="text-[14px] text-white leading-snug drop-shadow line-clamp-2 mt-0.5 whitespace-pre-line">
+          {hasCaption && (
+            <p className="text-[13px] text-white/90 leading-snug drop-shadow mt-1 line-clamp-2 whitespace-pre-line">
               {body}
             </p>
           )}
           <p className="text-[12px] text-white/80 mt-1 flex items-center gap-1">
-            <Music2 className="size-3" />
-            <span>Original audio · TallinnDoll</span>
+            <Music2 className="size-3 shrink-0" />
+            {audioName ? (
+              <span className="truncate">{audioName}</span>
+            ) : (
+              <span>Original audio · TallinnDoll</span>
+            )}
+            {onAudioPlay && (
+              <button onClick={onAudioPlay} className="shrink-0 ml-1">
+                {isAudioPlaying ? (
+                  <Pause className="size-3 text-white fill-white" />
+                ) : (
+                  <Play className="size-3 text-white fill-white" />
+                )}
+              </button>
+            )}
           </p>
         </div>
 
@@ -1223,6 +1255,9 @@ export function FeedPreview({
         carouselIdx={carouselIdx}
         onCarouselPrev={onCarouselPrev}
         onCarouselNext={onCarouselNext}
+        audioName={audioName}
+        onAudioPlay={onAudioPlay}
+        isAudioPlaying={isAudioPlaying}
       />
     );
   }
@@ -1279,6 +1314,9 @@ export function StoryPreview({
       imageSrc={imageSrc}
       isVideo={isVideo}
       videoSrc={videoSrc}
+      audioName={audioName}
+      onAudioPlay={onAudioPlay}
+      isAudioPlaying={isAudioPlaying}
     />
   );
 }

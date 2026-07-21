@@ -92,17 +92,33 @@ interface PreviewOption {
   isVideo: boolean;
 }
 
-function previewOptionsFor(isVideo: boolean): PreviewOption[] {
-  return isVideo
-    ? [
-        { id: "facebook-feed-video", label: "Facebook Feed Video", platform: "facebook", surface: "feed", isVideo: true },
-        { id: "facebook-reel", label: "Facebook Reel", platform: "facebook", surface: "story", isVideo: true },
-        { id: "instagram-reel", label: "Instagram Reel", platform: "instagram", surface: "story", isVideo: true },
-      ]
-    : [
-        { id: "facebook-feed", label: "Facebook Feed", platform: "facebook", surface: "feed", isVideo: false },
-        { id: "instagram-feed", label: "Instagram Feed", platform: "instagram", surface: "feed", isVideo: false },
-      ];
+function previewOptionsFor(isVideo: boolean, placements: ("feed" | "story")[]): PreviewOption[] {
+  if (isVideo) {
+    const opts: PreviewOption[] = [];
+    if (placements.includes("feed")) opts.push({ id: "facebook-feed-video", label: "Facebook Feed Video", platform: "facebook", surface: "feed", isVideo: true });
+    if (placements.includes("story")) {
+      opts.push({ id: "facebook-reel", label: "Facebook Reel", platform: "facebook", surface: "story", isVideo: true });
+      opts.push({ id: "instagram-reel", label: "Instagram Reel", platform: "instagram", surface: "story", isVideo: true });
+    }
+    return opts.length > 0 ? opts : [
+      { id: "facebook-reel", label: "Facebook Reel", platform: "facebook", surface: "story", isVideo: true },
+      { id: "instagram-reel", label: "Instagram Reel", platform: "instagram", surface: "story", isVideo: true },
+    ];
+  }
+  // Images — feed or story based on placement selection
+  const opts: PreviewOption[] = [];
+  if (placements.includes("feed")) {
+    opts.push({ id: "facebook-feed", label: "Facebook Feed", platform: "facebook", surface: "feed", isVideo: false });
+    opts.push({ id: "instagram-feed", label: "Instagram Feed", platform: "instagram", surface: "feed", isVideo: false });
+  }
+  if (placements.includes("story")) {
+    opts.push({ id: "facebook-reel", label: "Facebook Story", platform: "facebook", surface: "story", isVideo: false });
+    opts.push({ id: "instagram-reel", label: "Instagram Story", platform: "instagram", surface: "story", isVideo: false });
+  }
+  return opts.length > 0 ? opts : [
+    { id: "facebook-feed", label: "Facebook Feed", platform: "facebook", surface: "feed", isVideo: false },
+    { id: "instagram-feed", label: "Instagram Feed", platform: "instagram", surface: "feed", isVideo: false },
+  ];
 }
 
 // ── Props ──
@@ -132,6 +148,7 @@ interface PostComposerProps {
     isVideo: boolean;
     caption: Caption;
     selectedPreviewLabel: string;
+    surface: string;
     targetPlatforms: string[];
   }) => void;
   onBack?: () => void;
@@ -194,8 +211,15 @@ export default function PostComposer({
   const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [fadeKey, setFadeKey] = useState(0);
 
+  // ── Publish targeting ──
+  const [targetPlatforms, setTargetPlatforms] = useState<("instagram" | "facebook")[]>([
+    "instagram",
+    "facebook",
+  ]);
+  const [targetPlacements, setTargetPlacements] = useState<("feed" | "story")[]>(["feed"]);
+
   // ── Derive current preview option ──
-  const previewOptions = useMemo(() => previewOptionsFor(isVideo), [isVideo]);
+  const previewOptions = useMemo(() => previewOptionsFor(isVideo, targetPlacements), [isVideo, targetPlacements]);
   const selectedPreview = useMemo(
     () => previewOptions.find((o) => o.id === selectedPreviewId) ?? previewOptions[0],
     [previewOptions, selectedPreviewId]
@@ -204,12 +228,32 @@ export default function PostComposer({
   const platform = selectedPreview.platform;
   const showDeviceToggle = !isVideo || selectedPreviewId === "facebook-feed-video";
 
-  // ── Publish targeting ──
-  const [targetPlatforms, setTargetPlatforms] = useState<("instagram" | "facebook")[]>([
-    "instagram",
-    "facebook",
-  ]);
-  const [targetPlacements, setTargetPlacements] = useState<("feed" | "story")[]>(["feed"]);
+  // Sync placement chips with preview selection
+  useEffect(() => {
+    if (surface === "story" && !targetPlacements.includes("story")) {
+      setTargetPlacements(["story"]);
+    } else if (surface === "feed" && !targetPlacements.includes("feed")) {
+      setTargetPlacements(["feed"]);
+    }
+  }, [surface]);
+
+  // Sync preview dropdown with platform selection (bidirectional)
+  useEffect(() => {
+    const hasIG = targetPlatforms.includes("instagram");
+    const hasFB = targetPlatforms.includes("facebook");
+    // If only one platform selected, pick a preview option for that platform
+    if (hasFB && !hasIG) {
+      const fbOpt = previewOptions.find((o) => o.platform === "facebook");
+      if (fbOpt && selectedPreviewId.includes("instagram")) {
+        setSelectedPreviewId(fbOpt.id);
+      }
+    } else if (hasIG && !hasFB) {
+      const igOpt = previewOptions.find((o) => o.platform === "instagram");
+      if (igOpt && selectedPreviewId.includes("facebook") && !selectedPreviewId.includes("feed-video")) {
+        setSelectedPreviewId(igOpt.id);
+      }
+    }
+  }, [targetPlatforms]);
 
   // ── Caption state ──
   const [collection, setCollection] = useState(collections[0]);
@@ -235,10 +279,16 @@ export default function PostComposer({
     return activeCrops["square"] ?? activeFile?.dataUrl ?? null;
   }, [surface, activeCrops, activeFile, isVideo]);
 
-  // ── Keep format key synced with selected preview ──
+  // ── Keep format key synced + safe zone for story ──
   useEffect(() => {
-    if (surface === "story") setActiveFormatKey("story");
-    else setActiveFormatKey("square");
+    if (surface === "story") {
+      setActiveFormatKey("story");
+      // Push subject lower — top 20% is Instagram's text overlay zone
+      if (focusY === 0.5) setFocusY(0.38);
+    } else {
+      setActiveFormatKey("square");
+      if (focusY < 0.4) setFocusY(0.5); // Restore default
+    }
   }, [surface]);
 
   // ── Pre-fill from draft (edit from History) ──
@@ -293,13 +343,23 @@ export default function PostComposer({
     if (isVideo) {
       setSelectedPreviewId("instagram-reel");
     } else {
-      setSelectedPreviewId((prev) =>
-        prev === "facebook-feed-video" || prev === "facebook-reel" || prev === "instagram-reel"
-          ? "instagram-feed"
-          : prev
-      );
+      // When switching to image, pick a valid image option based on placements
+      const imageOpts = previewOptionsFor(false, targetPlacements);
+      setSelectedPreviewId((prev) => {
+        const stillValid = imageOpts.find((o) => o.id === prev);
+        return stillValid ? prev : imageOpts[0]?.id || "instagram-feed";
+      });
     }
   }, [isVideo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  // ── Keep preview in sync with placement changes ──
+  useEffect(() => {
+    const validIds = new Set(previewOptions.map((o) => o.id));
+    if (!validIds.has(selectedPreviewId)) {
+      setSelectedPreviewId(previewOptions[0]?.id || "instagram-feed");
+    }
+  }, [previewOptions, selectedPreviewId]);
 
   // ── Update imgElRef when active slide changes ──
   // This ensures crop calculations + smart formatting use the correct image
@@ -790,11 +850,25 @@ export default function PostComposer({
     if (multiSlide) {
       try {
         if (!isUploadConfigured()) throw new Error("Cloudinary not configured.");
-        // Upload all slides to Cloudinary
+
+        // Import smart formatter dynamically
+        const { formatImageSmart } = await import("@/lib/smartFormat");
+
+        // Process & upload all slides — run AI smart format on each
         const urls: string[] = [];
-        for (const slide of mediaFiles) {
-          const slideCrop = slide.crops["square"] ?? slide.dataUrl;
-          const url = await uploadToPublicUrl(slideCrop);
+        for (let i = 0; i < mediaFiles.length; i++) {
+          const slide = mediaFiles[i];
+          onUpdatePublishTask(taskId, { message: `🎨 Enhancing slide ${i + 1}/${mediaFiles.length}…` });
+          let enhanced = slide.crops["square"] ?? slide.dataUrl;
+          // Run AI smart format if needed
+          try {
+            const preset = FORMAT_PRESETS.find((p) => p.key === "square")!;
+            const result = await formatImageSmart(slide.dataUrl, preset, {
+              description: caption.headline ? `${caption.headline} fashion photo` : undefined,
+            });
+            enhanced = result.dataUrl;
+          } catch { /* keep original */ }
+          const url = await uploadToPublicUrl(enhanced);
           urls.push(url);
         }
 
@@ -824,25 +898,55 @@ export default function PostComposer({
           }
         }
 
-        // Facebook → publish first slide as photo (FB doesn't have carousel API for pages)
+        // Facebook → create a collage grid and post as single image
         if (targetPlatforms.includes("facebook")) {
           try {
+            onUpdatePublishTask(taskId, { message: `🖼️ Creating collage for Facebook…` });
+            const loadedImages = await Promise.all(urls.map((u) => loadImage(u)));
+            // Create a 2-column grid collage
+            const cols = Math.min(loadedImages.length, 2);
+            const rows = Math.ceil(loadedImages.length / cols);
+            const cellSize = 1080;
+            const canvas = document.createElement("canvas");
+            canvas.width = cellSize * cols;
+            canvas.height = cellSize * rows;
+            const ctx = canvas.getContext("2d")!;
+            loadedImages.forEach((img, i) => {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              ctx.drawImage(img, col * cellSize, row * cellSize, cellSize, cellSize);
+            });
+            // Use toBlob for large canvases, upload directly to Cloudinary
+            const collageBlob: Blob = await new Promise((resolve, reject) => {
+              canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Canvas toBlob failed"))), "image/jpeg", 0.85);
+            });
+            const fbForm = new FormData();
+            fbForm.append("file", collageBlob, "collage.jpg");
+            fbForm.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
+            const fbUp = await fetch(
+              `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+              { method: "POST", body: fbForm }
+            );
+            const fbUpJson = await fbUp.json();
+            if (!fbUpJson.secure_url) throw new Error("Collage upload failed");
+            const collageUrl = fbUpJson.secure_url;
+
             const r = await publishPost({
               platform: "facebook",
               surface: "feed",
-              imageDataUrl: urls[0],
+              imageDataUrl: collageUrl,
               captionText: captionText(),
             });
             if (r.ok) {
               anyOk = true;
               firstUrl = firstUrl ?? r.url;
-              msgs.push("FB — first slide published");
+              msgs.push(`FB — collage posted (${urls.length} images)`);
               onCreatePost(buildPost("published", "facebook", "feed"));
             } else {
-              msgs.push(`FB failed: ${r.message}`);
+              msgs.push(`FB collage failed: ${r.message}`);
             }
           } catch (e) {
-            msgs.push(`FB error: ${e instanceof Error ? e.message : "Unknown"}`);
+            msgs.push(`FB collage error: ${e instanceof Error ? e.message : "Unknown"}`);
           }
         }
 
@@ -1298,6 +1402,7 @@ export default function PostComposer({
                     isVideo,
                     caption,
                     selectedPreviewLabel: selectedPreview.label,
+                    surface: selectedPreview.surface,
                     targetPlatforms,
                   })
                 }

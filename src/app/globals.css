@@ -142,7 +142,7 @@
 body {
   background-color: var(--neutral-primary);
   color: var(--body);
-  font-family: var(--font-lato), system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -364,6 +364,6 @@ body {
   --radius-md: var(--radius-base);
   --radius-lg: var(--radius-base);
   --radius-xl: var(--radius-full);
-  --font-sans: var(--font-lato), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-geist-mono), "JetBrains Mono", monospace;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Courier New", monospace;
 }

@@ -30,8 +30,10 @@ export async function publishPost(
     }
     if (!input.imageDataUrl) throw new Error("No formatted image to publish.");
 
-    // 1) host at a public HTTPS URL (Meta requirement)
-    const imageUrl = await uploadToPublicUrl(input.imageDataUrl);
+    // 1) ensure public HTTPS URL — if already https, skip re-upload
+    const imageUrl = input.imageDataUrl.startsWith("https://")
+      ? input.imageDataUrl
+      : await uploadToPublicUrl(input.imageDataUrl);
 
     // 2) publish via the platform route
     const endpoint =

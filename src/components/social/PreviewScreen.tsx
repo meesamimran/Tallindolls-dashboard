@@ -112,32 +112,41 @@ export default function PreviewScreen({
             </div>
           </div>
 
-          {/* Audio Selection */}
-          <div>
-            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-              🎵 Audio (optional)
+          {/* Audio Selection — only for feed/reel, not plain story */}
+          {surface !== "story" && (
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
+                🎵 Audio (optional)
+              </p>
+              <SongSearch onSelect={setSelectedSong} selectedSong={selectedSong} />
+              {selectedSong && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-[var(--body-subtle)]">
+                    Audio attached — visible in the preview on the right.
+                  </p>
+                  <label className="flex items-start gap-3 cursor-pointer p-3 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
+                    <input
+                      type="checkbox"
+                      checked={audioConsent}
+                      onChange={(e) => setAudioConsent(e.target.checked)}
+                      className="mt-0.5 size-4 accent-[var(--brand)] cursor-pointer shrink-0"
+                    />
+                    <span className="text-[13px] text-[var(--fg-warning)] leading-snug font-medium">
+                      I understand this will be posted as a <strong>Reel</strong> with the audio track
+                      &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot;.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Story caption hint */}
+          {surface === "story" && captionText && (
+            <p className="text-[11px] text-[var(--body-subtle)]">
+              Caption will appear as text overlay on your Story.
             </p>
-            <SongSearch onSelect={setSelectedSong} selectedSong={selectedSong} />
-            {selectedSong && (
-              <div className="space-y-2">
-                <p className="text-[11px] text-[var(--body-subtle)]">
-                  Audio attached — visible in the preview on the right.
-                </p>
-                <label className="flex items-start gap-3 cursor-pointer p-3 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
-                  <input
-                    type="checkbox"
-                    checked={audioConsent}
-                    onChange={(e) => setAudioConsent(e.target.checked)}
-                    className="mt-0.5 size-4 accent-[var(--brand)] cursor-pointer shrink-0"
-                  />
-                  <span className="text-[13px] text-[var(--fg-warning)] leading-snug font-medium">
-                    I understand this will be posted as a <strong>Reel</strong> with the audio track
-                    &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot;.
-                  </span>
-                </label>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Publishing info */}
           <div>
@@ -146,7 +155,7 @@ export default function PreviewScreen({
             </p>
             <div className="flex flex-wrap gap-2">
               <span className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)]">
-                {selectedPreviewLabel}
+                {surface === "story" ? "Story / Reel" : "Feed"}
               </span>
               {targetPlatforms.map((p) => (
                 <span
@@ -160,36 +169,46 @@ export default function PreviewScreen({
           </div>
         </div>
 
-        {/* RIGHT: Live Preview (same component as Screen 1) */}
+        {/* RIGHT: Live Preview */}
         <div>
           <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
             Live Preview
           </p>
-          <div className="bg-[var(--neutral-secondary-medium)] rounded-[2px] p-4 flex justify-center">
-            {surface === "story" ? (
-              <StoryPreview
-                platform={platform}
-                caption={caption}
-                imageSrc={imageSrc}
-                isVideo={isVideo}
-                videoSrc={null}
-                audioName={audioName}
-                onAudioPlay={selectedSong ? handlePlayPause : undefined}
-                isAudioPlaying={playing}
-              />
-            ) : (
-              <FeedPreview
-                platform={platform}
-                device="desktop"
-                caption={caption}
-                imageSrc={imageSrc}
-                isVideo={isVideo}
-                videoSrc={null}
-                audioName={audioName}
-                onAudioPlay={selectedSong ? handlePlayPause : undefined}
-                isAudioPlaying={playing}
-              />
-            )}
+          <div className={cn(
+            "bg-[var(--neutral-secondary-medium)] rounded-[2px] p-4",
+            targetPlatforms.length > 1 ? "grid grid-cols-1 xl:grid-cols-2 gap-4" : "flex justify-center"
+          )}>
+            {targetPlatforms.map((p) => {
+              const pv = p as "instagram" | "facebook";
+              return (
+                <div key={p} className="flex justify-center min-w-0">
+                  {surface === "story" ? (
+                    <StoryPreview
+                      platform={pv}
+                      caption={caption}
+                      imageSrc={imageSrc}
+                      isVideo={isVideo}
+                      videoSrc={null}
+                      audioName={audioName}
+                      onAudioPlay={selectedSong ? handlePlayPause : undefined}
+                      isAudioPlaying={playing}
+                    />
+                  ) : (
+                    <FeedPreview
+                      platform={pv}
+                      device="desktop"
+                      caption={caption}
+                      imageSrc={imageSrc}
+                      isVideo={isVideo}
+                      videoSrc={null}
+                      audioName={audioName}
+                      onAudioPlay={selectedSong ? handlePlayPause : undefined}
+                      isAudioPlaying={playing}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

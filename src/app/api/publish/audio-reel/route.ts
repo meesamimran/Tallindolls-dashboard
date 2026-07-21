@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     songName?: string;
     audioName?: string;
     caption?: string;
+    targetPlatforms?: ("instagram" | "facebook")[];
   };
   try {
     body = await request.json();
@@ -91,9 +92,14 @@ export async function POST(request: Request) {
     userToken: META_USER_TOKEN as string,
     fbPageId: FB_PAGE_ID as string,
     fbPageToken: FB_PAGE_ACCESS_TOKEN as string,
+    targetPlatforms: body.targetPlatforms || undefined,
   });
 
-  if (!result.ok) {
+  const anyOk = result.instagram || result.facebook;
+  if (result.errors.length > 0) {
+    console.warn("⚠️ Audio Reel partial errors:", result.errors);
+  }
+  if (!anyOk) {
     console.error("❌ Audio Reel publish failed:", result.errors);
     return NextResponse.json(
       { ok: false, errors: result.errors, videoUrl: result.videoUrl, track: result.track },
@@ -101,12 +107,13 @@ export async function POST(request: Request) {
     );
   }
 
-  console.log("✅ Audio Reel published successfully");
+  console.log("✅ Audio Reel published — IG:", !!result.instagram, "FB:", !!result.facebook);
   return NextResponse.json({
     ok: true,
     instagram: result.instagram,
     facebook: result.facebook,
     videoUrl: result.videoUrl,
     track: result.track,
+    errors: result.errors,
   });
 }

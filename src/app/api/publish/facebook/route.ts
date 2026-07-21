@@ -128,7 +128,9 @@ export async function POST(request: Request) {
       access_token: PAGE_TOKEN,
     };
     if (message) params.message = message;
+    console.log("FB /photos params:", { url: params.url?.slice(0, 80), message: params.message?.slice(0, 40) });
     const json = await graphPost(`${FB_PAGE_ID}/photos`, params);
+    console.log("FB /photos response:", JSON.stringify(json).slice(0, 300));
 
     return Response.json({
       id: json.post_id || json.id,
