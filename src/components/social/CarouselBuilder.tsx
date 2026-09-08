@@ -210,7 +210,7 @@ export default function CarouselBuilder({ onCarouselReady, onCaptionReady, initi
   const handleGenerateCaption = async () => {
     setGeneratingCap(true);
     try {
-      const user = `Instagram carousel copy for TallinnDoll (${slides.length} slides):\n- ${genPrompt || "fashion collection"}\n- Estonian, formal Teie. Provide: 1) Headline (max 40), 2) Body copy, 3) 3-5 Estonian hashtags, 4) CTA`;
+      const user = `Instagram carousel copy for TallinnDoll (${slides.length} slides):\n- ${genPrompt || "fashion collection"}\n- Estonian, "Sina/Sa" voice (never "Teie"). Provide: 1) Headline (max 40), 2) Body copy, 3) 3-5 hashtags from the brand set, 4) CTA`;
       const res = await fetch("/api/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ systemPrompt: BRAND_SYSTEM_PROMPT, userPrompt: user }) });
       const json = await res.json();
       if (json.result) {

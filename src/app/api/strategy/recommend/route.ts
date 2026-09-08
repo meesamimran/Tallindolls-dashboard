@@ -7,7 +7,7 @@
 
 import type { PostInsight } from "@/types/index";
 
-const BRAND_STRATEGIST_PROMPT = `You are a senior content strategist for TallinnDoll, a premium Estonian fashion brand. Brand voice: elegant, understated, Nordic minimalism. Target audience: style-conscious women 25–45.
+const BRAND_STRATEGIST_PROMPT = `You are a senior content strategist for TallinnDoll, an Estonian fashion brand. Brand voice: poetic, warm, playful, feminine and confidence-empowering — selling the feeling, never the product spec. Target audience: style-conscious women 25–45.
 
 Your role is to analyze the performance of published social media posts (Instagram and Facebook) and give actionable recommendations. Focus on:
 1. Which types of content perform best (formats, themes, captions).
@@ -18,7 +18,7 @@ Your role is to analyze the performance of published social media posts (Instagr
 
 Rules:
 - Be specific and data-driven. Reference actual metrics when possible.
-- Keep Estonian context in mind (formal "Teie" tone, no discount words like "odav", "allahindlus").
+- Keep Estonian context in mind: address the customer as "Sina"/"Sa" (never "Teie"), first-person "Meie", and no discount words like "odav" or "allahindlus" (use a promo code + "% off" for sales instead).
 - Structure your answer as 3–6 bullet-point recommendations, each 1–2 sentences.
 - End with a 1-sentence overall summary.
 - Use plain text, no markdown formatting.`;
@@ -100,7 +100,7 @@ function fallbackRecommendation(posts: PostInsight[]): {
       "Test posting at different times and compare engagement — use this data to find your audience's peak activity window.",
       "Review and refresh underperforming posts with new visuals or captions instead of starting from scratch.",
     ],
-    summary: `Based on ${posts.length} published posts: ${topPlatform} is your stronger platform. Focus on high-engagement formats (carousels, Reels) and consistent brand-voice captions at Estonian 'Teie' tone.`,
+    summary: `Based on ${posts.length} published posts: ${topPlatform} is your stronger platform. Focus on high-engagement formats (carousels, Reels) and consistent emotion-first captions in the Estonian "Sina/Sa" voice.`,
   };
 }
 
