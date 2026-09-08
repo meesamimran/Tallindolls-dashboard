@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ScheduledPost } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import ScheduleModal from "@/components/social/ScheduleModal";
+import { publishPost } from "@/lib/publishPost";
+import { uploadToPublicUrl, isUploadConfigured } from "@/lib/uploadMedia";
 import {
-  Clock, ImageIcon, Send, Trash2, Edit, CheckCircle2, Calendar, MoreHorizontal,
+  Clock, ImageIcon, Send, Trash2, Edit, Calendar, Loader2, ExternalLink, RefreshCw,
 } from "lucide-react";
 
 const CARD =
@@ -17,12 +20,43 @@ const GRADIENT_BRAND: React.CSSProperties = {
 };
 
 const STORAGE_KEY = "published-posts";
+const SYNC_INTERVAL_MS = 30_000; // Poll server every 30s for status updates
+
+// ── Server task summary (from PUT /api/cron/publish-scheduled) ──
+
+interface ServerTaskSummary {
+  serverId: string;
+  scheduledAt: string;
+  status: "pending" | "processing" | "published" | "failed";
+  error?: string;
+  permalink?: string;
+  platforms: string[];
+  surface: string;
+}
+
+// ── Helpers ──
+
+function safeFormat(dateStr: string | undefined, fallback: string, fmt: (d: Date) => string): string {
+  if (!dateStr) return fallback;
+  try {
+    // Handle "YYYY-MM-DDTHH:MM" format (no timezone)
+    const d = dateStr.includes("T") && !dateStr.includes("Z") && !dateStr.includes("+")
+      ? new Date(dateStr + ":00")  // append seconds
+      : new Date(dateStr);
+    if (isNaN(d.getTime())) return fallback;
+    return fmt(d);
+  } catch {
+    return fallback;
+  }
+}
 
 function loadPosts(): ScheduledPost[] {
   if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    const raw = JSON.parse(stored);
+    return Array.isArray(raw) ? raw.filter((p: any) => p && p.id) : [];
   } catch {
     return [];
   }
@@ -31,16 +65,21 @@ function loadPosts(): ScheduledPost[] {
 function savePosts(posts: ScheduledPost[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(posts.slice(0, 200)));
-  } catch { /* quota exceeded — silently ignore */ }
+  } catch { /* quota exceeded */ }
 }
 
 function groupByDate(posts: ScheduledPost[]): Map<string, ScheduledPost[]> {
   const groups = new Map<string, ScheduledPost[]>();
   posts
     .slice()
-    .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime())
+    .sort((a, b) => {
+      const getTime = (d: string | undefined) => {
+        try { const t = new Date(d || "").getTime(); return isNaN(t) ? 0 : t; } catch { return 0; }
+      };
+      return getTime(b.scheduledDate) - getTime(a.scheduledDate);
+    })
     .forEach((p) => {
-      const date = format(new Date(p.scheduledDate), "yyyy-MM-dd");
+      const date = safeFormat(p.scheduledDate, "Unknown", (d) => format(d, "yyyy-MM-dd"));
       const existing = groups.get(date) || [];
       existing.push(p);
       groups.set(date, existing);
@@ -48,23 +87,86 @@ function groupByDate(posts: ScheduledPost[]): Map<string, ScheduledPost[]> {
   return groups;
 }
 
+// ── Component ──
+
 export default function HistoryPage() {
   const router = useRouter();
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
-  const [scheduleDate, setScheduleDate] = useState("");
-  const [scheduleTime, setScheduleTime] = useState("");
+  const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set());
+  const [publishResults, setPublishResults] = useState<Record<string, { ok: boolean; message: string; url?: string }>>({});
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Initial load ──
   useEffect(() => {
     setPosts(loadPosts());
     setLoaded(true);
   }, []);
 
-  // Persist on every change
+  // ── Persist on every change ──
   useEffect(() => {
     if (loaded) savePosts(posts);
   }, [posts, loaded]);
+
+  // ── Server sync: poll for cron-published status updates ──
+  const syncWithServer = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/cron/publish-scheduled", { method: "PUT" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.ok || !Array.isArray(json.tasks)) return;
+
+      const serverTasks: ServerTaskSummary[] = json.tasks;
+      const serverMap = new Map<string, ServerTaskSummary>();
+      serverTasks.forEach((t) => serverMap.set(t.serverId, t));
+
+      setPosts((prev) => {
+        let changed = false;
+        const updated = prev.map((post) => {
+          // Match by serverTaskId or by reconstructing the server ID pattern
+          const serverId = post.serverTaskId;
+          const serverTask = serverId ? serverMap.get(serverId) : undefined;
+
+          if (!serverTask) return post;
+
+          // Map server status → client status
+          const serverStatus = serverTask.status;
+          let newStatus: ScheduledPost["status"] = post.status;
+          if (serverStatus === "published") newStatus = "published";
+          else if (serverStatus === "failed") newStatus = post.status; // keep as "scheduled" so user can retry
+          else if (serverStatus === "processing") newStatus = "scheduled"; // still in progress
+
+          if (newStatus !== post.status || serverTask.permalink !== post.permalink) {
+            changed = true;
+            return { ...post, status: newStatus, permalink: serverTask.permalink };
+          }
+          return post;
+        });
+
+        return changed ? updated : prev;
+      });
+      setLastSync(new Date());
+    } catch {
+      // server may not be reachable — ignore
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  // Sync on mount and periodically
+  useEffect(() => {
+    syncWithServer();
+    syncTimerRef.current = setInterval(syncWithServer, SYNC_INTERVAL_MS);
+    return () => {
+      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+    };
+  }, [syncWithServer]);
+
+  // ── Actions ──
 
   const updatePost = useCallback((id: string, update: Partial<ScheduledPost>) => {
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...update } : p)));
@@ -74,15 +176,48 @@ export default function HistoryPage() {
     setPosts((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
-  const publishNow = useCallback((id: string) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, status: "published" as const, scheduledDate: new Date().toISOString() }
-          : p
-      )
-    );
-    // If publishing a draft, the draft entry becomes "published"
+  /** Publish Now — actually calls the publish API, not just a status change. */
+  const publishNow = useCallback(async (post: ScheduledPost) => {
+    if (!post.imageDataUrl) return;
+    setPublishingIds((prev) => new Set(prev).add(post.id));
+
+    try {
+      let imageUrl = post.imageDataUrl;
+      // Upload to Cloudinary if needed
+      if (imageUrl.startsWith("data:") && isUploadConfigured()) {
+        imageUrl = await uploadToPublicUrl(imageUrl);
+      }
+
+      const result = await publishPost({
+        platform: post.platform.toLowerCase().includes("facebook") ? "facebook" : "instagram",
+        surface: post.surface ?? "feed",
+        imageDataUrl: imageUrl,
+        captionText: post.content,
+      });
+
+      setPublishResults((prev) => ({ ...prev, [post.id]: result }));
+
+      if (result.ok) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === post.id
+              ? { ...p, status: "published" as const, scheduledDate: new Date().toISOString(), permalink: result.url }
+              : p
+          )
+        );
+      }
+    } catch (err) {
+      setPublishResults((prev) => ({
+        ...prev,
+        [post.id]: { ok: false, message: err instanceof Error ? err.message : "Publish failed" },
+      }));
+    } finally {
+      setPublishingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+    }
   }, []);
 
   const saveAsScheduled = useCallback((id: string, date: string) => {
@@ -94,7 +229,6 @@ export default function HistoryPage() {
   }, []);
 
   const editPost = useCallback((post: ScheduledPost) => {
-    // Save draft data to sessionStorage so Content page can pre-fill
     try {
       sessionStorage.setItem(
         "edit-draft",
@@ -123,6 +257,7 @@ export default function HistoryPage() {
             : "bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)]"
     );
 
+  // ── Loading skeleton ──
   if (!loaded) {
     return (
       <div className="max-w-[900px] mx-auto px-6 space-y-6">
@@ -141,6 +276,7 @@ export default function HistoryPage() {
 
   return (
     <div className="max-w-[900px] mx-auto px-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[28px] font-semibold text-[var(--heading)] flex items-center gap-3">
@@ -151,8 +287,19 @@ export default function HistoryPage() {
             {posts.length} post{posts.length !== 1 ? "s" : ""} — drafts, scheduled &amp; published.
           </p>
         </div>
+        {/* Sync indicator */}
+        <button
+          onClick={syncWithServer}
+          disabled={syncing}
+          title={lastSync ? `Last synced ${format(lastSync, "HH:mm:ss")}` : "Sync with server"}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-[2px] border border-[var(--border-default)] text-[var(--body-subtle)] hover:text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
+        >
+          <RefreshCw className={cn("size-3", syncing && "animate-spin")} />
+          {syncing ? "Syncing…" : lastSync ? `Synced ${format(lastSync, "HH:mm")}` : "Sync"}
+        </button>
       </div>
 
+      {/* Empty state */}
       {posts.length === 0 ? (
         <div className={cn(CARD, "p-12 text-center")}>
           <Clock className="size-12 text-[var(--body-subtle)] mx-auto mb-4" />
@@ -174,13 +321,19 @@ export default function HistoryPage() {
             <div key={date}>
               <h2 className="text-[14px] font-semibold text-[var(--body)] mb-3 flex items-center gap-2 sticky top-0 bg-[var(--neutral-primary)] py-2 z-10">
                 <span className="size-2 rounded-full bg-[var(--brand)]" />
-                {format(new Date(date + "T00:00:00"), "EEEE, MMMM d, yyyy")}
+                {date === "Unknown"
+                  ? "Unknown Date"
+                  : format(new Date(date + "T00:00:00"), "EEEE, MMMM d, yyyy")}
                 <span className="text-[12px] text-[var(--body-subtle)] font-normal">
                   ({dayPosts.length})
                 </span>
               </h2>
               <div className="space-y-2">
-                {dayPosts.map((post) => (
+                {dayPosts.map((post) => {
+                  const isPublishing = publishingIds.has(post.id);
+                  const pubResult = publishResults[post.id];
+
+                  return (
                   <div key={post.id} className={cn(CARD, "p-4 flex items-start gap-4 group")}>
                     {/* Thumbnail */}
                     <div className="shrink-0">
@@ -200,11 +353,21 @@ export default function HistoryPage() {
 
                     {/* Content */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-[14px] font-semibold text-[var(--heading)] truncate">
                           {post.title}
                         </p>
                         <span className={statusStyle(post.status)}>{post.status}</span>
+                        {post.permalink && (
+                          <a
+                            href={post.permalink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[var(--brand)] hover:underline"
+                          >
+                            <ExternalLink className="size-2.5" /> View
+                          </a>
+                        )}
                       </div>
                       <p className="text-[12px] text-[var(--body-subtle)] mt-1 line-clamp-2 leading-snug">
                         {post.content}
@@ -219,14 +382,25 @@ export default function HistoryPage() {
                           </span>
                         )}
                         <span className="text-[11px] text-[var(--body-subtle)]">
-                          {format(new Date(post.scheduledDate), "HH:mm")}
+                          {safeFormat(post.scheduledDate, "--:--", (d) => format(d, "HH:mm"))}
                         </span>
                       </div>
+
+                      {/* Publish result feedback */}
+                      {pubResult && (
+                        <div className={cn(
+                          "mt-2 p-2 rounded-[2px] text-[12px]",
+                          pubResult.ok
+                            ? "bg-[var(--success-soft)] text-[var(--fg-success)]"
+                            : "bg-[var(--danger-soft)] text-[var(--fg-danger)]"
+                        )}>
+                          {pubResult.message}
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      {/* Published: read-only, just delete */}
                       {post.status === "published" ? (
                         <button
                           onClick={() => deletePost(post.id)}
@@ -237,13 +411,18 @@ export default function HistoryPage() {
                         </button>
                       ) : (
                         <>
-                          {/* Draft & Scheduled: Publish Now */}
+                          {/* Publish Now — actually publishes via API */}
                           <button
-                            onClick={() => publishNow(post.id)}
+                            onClick={() => publishNow(post)}
+                            disabled={isPublishing || !post.imageDataUrl}
                             title="Publish now"
-                            className="size-8 rounded-[2px] flex items-center justify-center hover:bg-[var(--success-soft)] text-[var(--body-subtle)] hover:text-[var(--fg-success)] transition-colors"
+                            className="size-8 rounded-[2px] flex items-center justify-center hover:bg-[var(--success-soft)] text-[var(--body-subtle)] hover:text-[var(--fg-success)] disabled:opacity-50 transition-colors"
                           >
-                            <Send className="size-3.5" />
+                            {isPublishing ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Send className="size-3.5" />
+                            )}
                           </button>
                           {/* Edit */}
                           <button
@@ -253,15 +432,10 @@ export default function HistoryPage() {
                           >
                             <Edit className="size-3.5" />
                           </button>
-                          {/* Scheduled: Change date/time */}
+                          {/* Reschedule */}
                           {post.status === "scheduled" && (
                             <button
-                              onClick={() => {
-                                setEditingScheduleId(post.id);
-                                const d = new Date(post.scheduledDate);
-                                setScheduleDate(d.toISOString().slice(0, 10));
-                                setScheduleTime(d.toISOString().slice(11, 16));
-                              }}
+                              onClick={() => setEditingScheduleId(post.id)}
                               title="Reschedule"
                               className="size-8 rounded-[2px] flex items-center justify-center hover:bg-[var(--warning-soft)] text-[var(--body-subtle)] hover:text-[var(--fg-warning)] transition-colors"
                             >
@@ -280,47 +454,53 @@ export default function HistoryPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Reschedule Modal */}
-      {editingScheduleId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditingScheduleId(null)}>
-          <div className="bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-2xl w-full max-w-[360px] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[16px] font-semibold text-[var(--heading)]">Reschedule Post</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1">Date</label>
-                <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
-                  style={{ backgroundColor: "var(--neutral-secondary-medium)", border: "1px solid var(--border-default-medium)", color: "var(--heading)" }} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1">Time</label>
-                <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
-                  style={{ backgroundColor: "var(--neutral-secondary-medium)", border: "1px solid var(--border-default-medium)", color: "var(--heading)" }} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 justify-end">
-              <button onClick={() => setEditingScheduleId(null)}
-                className="px-4 py-2 text-[13px] font-medium rounded-[2px] border border-[var(--border-default)] text-[var(--body)] hover:bg-[var(--neutral-secondary-medium)] transition-colors">Cancel</button>
-              <button onClick={() => {
-                setPosts((prev) => prev.map((p) => p.id === editingScheduleId ? { ...p, scheduledDate: `${scheduleDate}T${scheduleTime}:00` } : p));
-                setEditingScheduleId(null);
-              }}
-                disabled={!scheduleDate || !scheduleTime}
-                className="px-4 py-2 text-[13px] font-semibold text-white rounded-[2px] disabled:opacity-50" style={GRADIENT_BRAND}>
-                Update Schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ScheduleModal
+        open={!!editingScheduleId}
+        onClose={() => setEditingScheduleId(null)}
+        initialDate={editingScheduleId ? posts.find((p) => p.id === editingScheduleId)?.scheduledDate : undefined}
+        onConfirm={async (dateTime) => {
+          if (!editingScheduleId) return;
+          const post = posts.find((p) => p.id === editingScheduleId);
+          if (!post) return;
+
+          // Update locally first
+          setPosts((prev) => prev.map((p) => p.id === editingScheduleId ? { ...p, status: "scheduled" as const, scheduledDate: dateTime } : p));
+          setEditingScheduleId(null);
+
+          // Also POST to server so the cron can publish it
+          if (post.imageDataUrl) {
+            try {
+              let imageUrl = post.imageDataUrl;
+              if (imageUrl.startsWith("data:") && isUploadConfigured()) {
+                imageUrl = await uploadToPublicUrl(imageUrl);
+              }
+              const res = await fetch("/api/cron/publish-scheduled", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  imageUrl,
+                  caption: post.content,
+                  platforms: post.platform.toLowerCase().includes("facebook") ? ["facebook"] : ["instagram"],
+                  surface: post.surface === "story" ? "story" : "feed",
+                  scheduledAt: dateTime,
+                }),
+              });
+              const json = await res.json();
+              if (json.ok && json.task?.id) {
+                setPosts((prev) => prev.map((p) => p.id === editingScheduleId ? { ...p, serverTaskId: json.task.id } : p));
+              }
+            } catch { /* localStorage is already updated; server will catch up on next Content page schedule */ }
+          }
+        }}
+      />
     </div>
   );
 }

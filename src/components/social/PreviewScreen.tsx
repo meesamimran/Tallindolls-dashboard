@@ -2,10 +2,11 @@
 
 import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { type Caption, FeedPreview, StoryPreview, type SocialPlatform } from "./SocialPreviews";
+import { type Caption, FeedPreview, StoryPreview, type SocialPlatform, type PreviewDevice } from "./SocialPreviews";
 import SongSearch, { type SongResult } from "./SongSearch";
+import ScheduleModal from "./ScheduleModal";
 import {
-  Send, Loader2, Calendar, ArrowLeft, Music2, Play, Pause,
+  Send, Loader2, Calendar, ArrowLeft, Music2, Play, Pause, Monitor, Smartphone, CheckCircle2,
 } from "lucide-react";
 
 const CARD =
@@ -18,6 +19,7 @@ const GRADIENT_BRAND: React.CSSProperties = {
 interface PreviewScreenProps {
   imageSrc: string | null;
   isVideo: boolean;
+  videoSrc?: string | null;
   caption: Caption;
   selectedPreviewLabel: string;
   targetPlatforms: string[];
@@ -25,6 +27,9 @@ interface PreviewScreenProps {
   surface: "feed" | "story";
   hasActiveTasks: boolean;
   isPublishing?: boolean;
+  carouselSlides?: { formatted: string | null; isVideo?: boolean; videoBlobUrl?: string | null }[];
+  carouselIdx?: number;
+  mediaFilesCount?: number;
   onPublish: (song: SongResult | null) => void;
   onSchedule: (song: SongResult | null, scheduledDate: string) => void;
   onSaveDraft: () => void;
@@ -34,6 +39,7 @@ interface PreviewScreenProps {
 export default function PreviewScreen({
   imageSrc,
   isVideo,
+  videoSrc,
   caption,
   selectedPreviewLabel,
   targetPlatforms,
@@ -41,6 +47,9 @@ export default function PreviewScreen({
   surface,
   hasActiveTasks,
   isPublishing,
+  carouselSlides,
+  carouselIdx,
+  mediaFilesCount,
   onPublish,
   onSchedule,
   onSaveDraft,
@@ -50,8 +59,8 @@ export default function PreviewScreen({
   const [playing, setPlaying] = useState(false);
   const [audioConsent, setAudioConsent] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState("");
-  const [scheduleTime, setScheduleTime] = useState("");
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
+  const [draftSaved, setDraftSaved] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const cleanField = (s: string) =>
@@ -76,7 +85,14 @@ export default function PreviewScreen({
     }
   };
 
+  const handleSaveDraft = () => {
+    setDraftSaved(true);
+    onSaveDraft();
+    setTimeout(() => setDraftSaved(false), 2500);
+  };
+
   const audioName = selectedSong ? `${selectedSong.artistName} - ${selectedSong.songTitle}` : undefined;
+  const multiSlide = (carouselSlides?.length ?? 0) > 1;
 
   return (
     <div className={cn(CARD, "p-6 space-y-5")}>
@@ -88,13 +104,20 @@ export default function PreviewScreen({
         >
           <ArrowLeft className="size-4" /> Back to Editor
         </button>
-        <span className="text-[12px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
-          Final Review &amp; Publish
-        </span>
+        <div className="flex items-center gap-2">
+          {draftSaved && (
+            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--fg-success)] animate-fade-in">
+              <CheckCircle2 className="size-3.5" /> Draft saved
+            </span>
+          )}
+          <span className="text-[12px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
+            Final Review &amp; Publish
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* LEFT: Caption + Audio */}
+        {/* LEFT: Caption + Audio + Info */}
         <div className="space-y-4">
           {/* Caption */}
           <div>
@@ -112,34 +135,32 @@ export default function PreviewScreen({
             </div>
           </div>
 
-          {/* Audio Selection — only for feed/reel, not plain story */}
-          {surface !== "story" && (
-            <div>
-              <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-                🎵 Audio (optional)
-              </p>
-              <SongSearch onSelect={setSelectedSong} selectedSong={selectedSong} />
-              {selectedSong && (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-[var(--body-subtle)]">
-                    Audio attached — visible in the preview on the right.
-                  </p>
-                  <label className="flex items-start gap-3 cursor-pointer p-3 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
-                    <input
-                      type="checkbox"
-                      checked={audioConsent}
-                      onChange={(e) => setAudioConsent(e.target.checked)}
-                      className="mt-0.5 size-4 accent-[var(--brand)] cursor-pointer shrink-0"
-                    />
-                    <span className="text-[13px] text-[var(--fg-warning)] leading-snug font-medium">
-                      I understand this will be posted as a <strong>Reel</strong> with the audio track
-                      &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot;.
-                    </span>
-                  </label>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Audio Selection */}
+          <div>
+            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
+              🎵 Audio (optional)
+            </p>
+            <SongSearch onSelect={setSelectedSong} selectedSong={selectedSong} />
+            {selectedSong && (
+              <div className="space-y-2">
+                <p className="text-[11px] text-[var(--body-subtle)]">
+                  Audio attached — visible in the preview on the right.
+                </p>
+                <label className="flex items-start gap-3 cursor-pointer p-3 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
+                  <input
+                    type="checkbox"
+                    checked={audioConsent}
+                    onChange={(e) => setAudioConsent(e.target.checked)}
+                    className="mt-0.5 size-4 accent-[var(--brand)] cursor-pointer shrink-0"
+                  />
+                  <span className="text-[13px] text-[var(--fg-warning)] leading-snug font-medium">
+                    I understand this will be posted as a <strong>{surface === "story" ? (isVideo ? "Reel" : "Story") : "Feed post"}</strong> with the audio track
+                    &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot;.
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
 
           {/* Story caption hint */}
           {surface === "story" && captionText && (
@@ -155,7 +176,7 @@ export default function PreviewScreen({
             </p>
             <div className="flex flex-wrap gap-2">
               <span className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)]">
-                {surface === "story" ? "Story / Reel" : "Feed"}
+                {surface === "story" ? (isVideo ? "Reel" : "Story") : "Feed"}
               </span>
               {targetPlatforms.map((p) => (
                 <span
@@ -165,18 +186,55 @@ export default function PreviewScreen({
                   {p}
                 </span>
               ))}
+              {multiSlide && (
+                <span className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)]">
+                  {carouselSlides?.length} slides
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         {/* RIGHT: Live Preview */}
         <div>
-          <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-            Live Preview
-          </p>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
+              Live Preview
+            </p>
+            {/* Device toggle for feed previews */}
+            {surface === "feed" && (
+              <div className="inline-flex rounded-[2px] border border-[var(--border-default)] overflow-hidden">
+                <button
+                  onClick={() => setDevice("desktop")}
+                  title="Desktop view"
+                  className={cn(
+                    "px-1.5 py-1 transition-colors",
+                    device === "desktop"
+                      ? "bg-[var(--brand-softer)] text-[var(--brand)]"
+                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                  )}
+                >
+                  <Monitor className="size-3.5" />
+                </button>
+                <button
+                  onClick={() => setDevice("mobile")}
+                  title="Mobile view"
+                  className={cn(
+                    "px-1.5 py-1 transition-colors",
+                    device === "mobile"
+                      ? "bg-[var(--brand-softer)] text-[var(--brand)]"
+                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                  )}
+                >
+                  <Smartphone className="size-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className={cn(
             "bg-[var(--neutral-secondary-medium)] rounded-[2px] p-4",
-            targetPlatforms.length > 1 ? "grid grid-cols-1 xl:grid-cols-2 gap-4" : "flex justify-center"
+            targetPlatforms.length > 1 && surface === "feed" ? "grid grid-cols-1 xl:grid-cols-2 gap-4" : "flex justify-center"
           )}>
             {targetPlatforms.map((p) => {
               const pv = p as "instagram" | "facebook";
@@ -188,7 +246,7 @@ export default function PreviewScreen({
                       caption={caption}
                       imageSrc={imageSrc}
                       isVideo={isVideo}
-                      videoSrc={null}
+                      videoSrc={videoSrc ?? null}
                       audioName={audioName}
                       onAudioPlay={selectedSong ? handlePlayPause : undefined}
                       isAudioPlaying={playing}
@@ -196,11 +254,13 @@ export default function PreviewScreen({
                   ) : (
                     <FeedPreview
                       platform={pv}
-                      device="desktop"
+                      device={device}
                       caption={caption}
                       imageSrc={imageSrc}
                       isVideo={isVideo}
-                      videoSrc={null}
+                      videoSrc={videoSrc ?? null}
+                      carouselSlides={carouselSlides}
+                      carouselIdx={carouselIdx}
                       audioName={audioName}
                       onAudioPlay={selectedSong ? handlePlayPause : undefined}
                       isAudioPlaying={playing}
@@ -216,19 +276,13 @@ export default function PreviewScreen({
       {/* Bottom Actions */}
       <div className="flex items-center gap-3 pt-3 border-t border-[var(--border-default)]">
         <button
-          onClick={onSaveDraft}
+          onClick={handleSaveDraft}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
         >
           Save Draft
         </button>
         <button
-          onClick={() => {
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            setScheduleDate(now.toISOString().slice(0, 10));
-            setScheduleTime(now.toISOString().slice(11, 16));
-            setShowSchedule(true);
-          }}
+          onClick={() => setShowSchedule(true)}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
         >
           <Calendar className="size-4" />
@@ -249,37 +303,11 @@ export default function PreviewScreen({
         </button>
       </div>
 
-      {/* Schedule Modal */}
-      {showSchedule && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSchedule(false)}>
-          <div className="bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-2xl w-full max-w-[380px] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[16px] font-semibold text-[var(--heading)]">Schedule Post</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1">Date</label>
-                <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
-                  style={{ backgroundColor: "var(--neutral-secondary-medium)", border: "1px solid var(--border-default-medium)", color: "var(--heading)" }} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1">Time</label>
-                <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
-                  style={{ backgroundColor: "var(--neutral-secondary-medium)", border: "1px solid var(--border-default-medium)", color: "var(--heading)" }} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 justify-end">
-              <button onClick={() => setShowSchedule(false)}
-                className="px-4 py-2 text-[13px] font-medium rounded-[2px] border border-[var(--border-default)] text-[var(--body)] hover:bg-[var(--neutral-secondary-medium)] transition-colors">Cancel</button>
-              <button onClick={() => { setShowSchedule(false); onSchedule(selectedSong, `${scheduleDate}T${scheduleTime}:00`); }}
-                disabled={!scheduleDate || !scheduleTime}
-                className="px-4 py-2 text-[13px] font-semibold text-white rounded-[2px] disabled:opacity-50" style={GRADIENT_BRAND}>
-                Confirm Schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ScheduleModal
+        open={showSchedule}
+        onClose={() => setShowSchedule(false)}
+        onConfirm={(dateTime) => onSchedule(selectedSong, dateTime)}
+      />
     </div>
   );
 }

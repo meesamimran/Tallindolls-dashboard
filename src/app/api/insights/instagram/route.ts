@@ -27,26 +27,36 @@ function extractMetric(data: { name: string; values?: { value?: number }[] }[] |
   return m?.values?.[0]?.value ?? 0;
 }
 
-async function fetchInsightsForMedia(mediaId: string): Promise<{
+async function fetchInsightsForMedia(mediaId: string, isVideo: boolean): Promise<{
   reach: number;
   impressions: number;
   saves: number;
+  shares: number;
+  views: number;
   engagement: number;
 }> {
   try {
+    // `reach`, `saved`, `shares` and `total_interactions` are valid for all IG media.
+    // `views` is only available for videos/reels.
+    // `impressions` was deprecated for IG media from v22.0 onwards.
+    const metrics = isVideo
+      ? "reach,saved,shares,total_interactions,views"
+      : "reach,saved,shares,total_interactions";
     const res = await fetch(
-      `${GRAPH}/${V}/${mediaId}/insights?metric=reach,impressions,saves,total_interactions&period=lifetime&access_token=${TOKEN}`
+      `${GRAPH}/${V}/${mediaId}/insights?metric=${metrics}&period=lifetime&access_token=${TOKEN}`
     );
     const json = await res.json();
     const data = json.data;
     return {
       reach: extractMetric(data, "reach"),
-      impressions: extractMetric(data, "impressions"),
-      saves: extractMetric(data, "saves"),
+      impressions: 0, // deprecated for IG media
+      saves: extractMetric(data, "saved"),
+      shares: extractMetric(data, "shares"),
+      views: extractMetric(data, "views"),
       engagement: extractMetric(data, "total_interactions"),
     };
   } catch {
-    return { reach: 0, impressions: 0, saves: 0, engagement: 0 };
+    return { reach: 0, impressions: 0, saves: 0, shares: 0, views: 0, engagement: 0 };
   }
 }
 
@@ -74,7 +84,8 @@ export async function GET() {
     // 2) enrich each post with insights in parallel
     const posts = await Promise.all(
       mediaList.map(async (m) => {
-        const insights = await fetchInsightsForMedia(m.id);
+        const isVideo = m.media_type === "VIDEO" || m.media_type === "REELS";
+        const insights = await fetchInsightsForMedia(m.id, isVideo);
         return {
           id: m.id,
           platform: "instagram" as const,
@@ -86,10 +97,12 @@ export async function GET() {
           metrics: {
             likes: m.like_count ?? 0,
             comments: m.comments_count ?? 0,
+            shares: insights.shares,
             reach: insights.reach,
             impressions: insights.impressions,
             saves: insights.saves,
             engagement: insights.engagement,
+            views: insights.views,
           },
         };
       })

@@ -42,12 +42,18 @@ function parseCaptionFromText(text: string): Caption {
 type ContentMode = "single" | "carousel";
 type Step = "composer" | "preview";
 
-// Persist posts to localStorage for History page
+// Persist posts to localStorage for History page.
+// Merges new post with existing entries by id to avoid duplicates.
 function persistPost(post: ScheduledPost) {
   try {
     const stored = localStorage.getItem("published-posts");
     const posts: ScheduledPost[] = stored ? JSON.parse(stored) : [];
-    posts.unshift(post);
+    const existingIdx = posts.findIndex((p) => p.id === post.id);
+    if (existingIdx >= 0) {
+      posts[existingIdx] = { ...posts[existingIdx], ...post };
+    } else {
+      posts.unshift(post);
+    }
     localStorage.setItem("published-posts", JSON.stringify(posts.slice(0, 100)));
   } catch { /* ignore */ }
 }
@@ -57,17 +63,22 @@ export default function ContentPage() {
   const [mode, setMode] = useState<ContentMode>("single");
   const [step, setStep] = useState<Step>("composer");
 
-  // Snapshot from composer step
+  // Snapshot from composer step — carries full media state to PreviewScreen
   const [snapshot, setSnapshot] = useState<{
     imageSrc: string | null;
     isVideo: boolean;
+    videoSrc: string | null;
     caption: Caption;
     selectedPreviewLabel: string;
     surface: string;
     targetPlatforms: string[];
+    carouselSlides?: { formatted: string | null; isVideo?: boolean; videoBlobUrl?: string | null }[];
+    carouselIdx?: number;
+    mediaFilesCount?: number;
   }>({
     imageSrc: null,
     isVideo: false,
+    videoSrc: null,
     caption: { headline: "", primaryText: "", hashtags: "", cta: "" },
     selectedPreviewLabel: "Instagram Feed",
     surface: "feed",
@@ -187,21 +198,79 @@ export default function ContentPage() {
     router.push("/history");
   }, [snapshot, router]);
 
-  // Schedule → History with custom date
-  const handleSchedule = useCallback((song: SongResult | null, scheduledDate: string) => {
+  // Schedule → save to server + localStorage + redirect
+  const handleSchedule = useCallback(async (song: SongResult | null, scheduledDate: string) => {
+    const localId = `scheduled-${Date.now()}`;
     const post: ScheduledPost = {
-      id: `scheduled-${Date.now()}`,
+      id: localId,
       title: snapshot.caption.headline || "Scheduled Post",
       content: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags, snapshot.caption.cta].filter(Boolean).join("\n\n"),
       platform: snapshot.targetPlatforms.join(", "),
-      scheduledDate,
+      scheduledDate: scheduledDate,
       status: "scheduled",
       imageDataUrl: snapshot.imageSrc ?? undefined,
-      surface: snapshot.isVideo ? "story" : "feed",
+      surface: snapshot.isVideo ? "story" : snapshot.surface as "feed" | "story",
     };
+    // Map surface to cron-compatible value: video story → reel
+    const cronSurface = snapshot.isVideo ? "reel" : (snapshot.surface === "story" ? "story" : "feed");
     if (song) post.content += `\n\n🎵 ${song.artistName} - ${song.songTitle}`;
     persistPost(post);
-    router.push("/history");
+
+    // Save to server for cron-based auto-publishing; store server task ID for cross-reference
+    let serverError: string | undefined;
+    if (snapshot.imageSrc) {
+      try {
+        let imageUrl = snapshot.imageSrc;
+        if (imageUrl.startsWith("data:")) {
+          imageUrl = await uploadToPublicUrl(imageUrl);
+        }
+        const res = await fetch("/api/cron/publish-scheduled", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageUrl,
+            caption: post.content,
+            platforms: snapshot.targetPlatforms,
+            surface: cronSurface,
+            scheduledAt: scheduledDate,
+          }),
+        });
+        const json = await res.json();
+        if (json.ok && json.task?.id) {
+          post.serverTaskId = json.task.id;
+          persistPost(post);
+          console.log(`📅 Scheduled: ${json.task.id.slice(-8)} for ${scheduledDate} [${cronSurface}] → server OK`);
+        } else {
+          serverError = json.error || "Server rejected schedule request";
+          console.error(`📅 Schedule FAILED: ${serverError}`);
+        }
+      } catch (err) {
+        serverError = err instanceof Error ? err.message : "Network error scheduling post";
+        console.error(`📅 Schedule FAILED: ${serverError}`);
+      }
+    } else {
+      serverError = "No image attached — cannot schedule without media";
+    }
+
+    // If server scheduling failed, keep as draft so user knows it didn't go through
+    if (serverError) {
+      post.status = "draft";
+      persistPost(post);
+      addPublishTask({
+        id: `sched-err-${Date.now()}`,
+        status: "error",
+        message: `Schedule failed: ${serverError}. Post saved as draft — try again.`,
+      });
+      router.push("/history");
+    } else {
+      // Success — show toast then redirect to History
+      setSuccessMsg(`Scheduled for ${scheduledDate.replace("T", " at ")} — will auto-publish then.`);
+      setResetKey((k) => k + 1);
+      setStep("composer");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      // Brief delay so user sees the success toast before redirect
+      setTimeout(() => router.push("/history"), 1500);
+    }
   }, [snapshot, router]);
 
   // Publish → audio reel API if song selected, else regular publish
@@ -230,7 +299,7 @@ export default function ContentPage() {
           updatePublishTask(taskId, { message: "🎬 Merging image + audio via FFmpeg…" });
           const res = await fetch("/api/publish/audio-reel", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl, audioUrl: cloudAudioUrl, audioName: `${song.artistName} - ${song.songTitle}`, caption: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n"), targetPlatforms: snapshot.targetPlatforms }),
+            body: JSON.stringify({ imageUrl, audioUrl: cloudAudioUrl, audioName: `${song.artistName} - ${song.songTitle}`, caption: [snapshot.caption.headline, snapshot.caption.primaryText, snapshot.caption.hashtags].filter(Boolean).join("\n\n"), targetPlatforms: snapshot.targetPlatforms, mediaType: snapshot.surface === "story" ? "story" : "reel" }),
           });
           const json = await res.json();
           if (json.ok) {
@@ -323,7 +392,11 @@ export default function ContentPage() {
         <PostComposer
           collections={COLLECTIONS}
           postTypes={POST_TYPES}
-          onCreatePost={(post) => { persistPost(post); }}
+          onCreatePost={(post) => {
+            persistPost(post);
+            setSuccessMsg("Draft saved! View it in History.");
+            setTimeout(() => setSuccessMsg(null), 3000);
+          }}
           onRequestCarousel={handleRequestCarousel}
           publishTasks={publishTasks}
           onAddPublishTask={addPublishTask}
@@ -353,6 +426,7 @@ export default function ContentPage() {
         <PreviewScreen
           imageSrc={snapshot.imageSrc}
           isVideo={snapshot.isVideo}
+          videoSrc={snapshot.videoSrc}
           caption={snapshot.caption}
           selectedPreviewLabel={snapshot.selectedPreviewLabel}
           targetPlatforms={snapshot.targetPlatforms}
@@ -366,6 +440,9 @@ export default function ContentPage() {
           surface={snapshot.surface as "feed" | "story"}
           hasActiveTasks={hasActiveTasks || publishingFromPreview}
           isPublishing={publishingFromPreview}
+          carouselSlides={snapshot.carouselSlides}
+          carouselIdx={snapshot.carouselIdx}
+          mediaFilesCount={snapshot.mediaFilesCount}
           onPublish={handlePublish}
           onSchedule={handleSchedule}
           onSaveDraft={handleSaveDraft}

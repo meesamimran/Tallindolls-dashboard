@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
+import CronPoller from "@/components/CronPoller";
 
 export default function DashboardLayout({
   children,
@@ -69,6 +70,7 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
+      <CronPoller />
     </ThemeProvider>
   );
 }

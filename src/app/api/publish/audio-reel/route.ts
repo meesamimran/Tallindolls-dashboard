@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     audioName?: string;
     caption?: string;
     targetPlatforms?: ("instagram" | "facebook")[];
+    mediaType?: "reel" | "story";
   };
   try {
     body = await request.json();
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
     fbPageId: FB_PAGE_ID as string,
     fbPageToken: FB_PAGE_ACCESS_TOKEN as string,
     targetPlatforms: body.targetPlatforms || undefined,
+    mediaType: body.mediaType || "reel",
   });
 
   const anyOk = result.instagram || result.facebook;

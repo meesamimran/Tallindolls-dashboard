@@ -912,6 +912,83 @@ function InstagramFeedPost({
 }
 
 // ============================================================
+// FACEBOOK STORY (IMAGE) PREVIEW
+// ============================================================
+
+function FacebookStoryPost({
+  caption,
+  imageSrc,
+}: {
+  caption: Caption;
+  imageSrc: string | null;
+}) {
+  const body = formatCaption(caption);
+
+  return (
+    <PhoneFrame platform="facebook">
+      <div className="relative w-full bg-black" style={{ aspectRatio: "9/16" }}>
+        {/* Media */}
+        {imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt="Story"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#1c1c1e] to-[#2a2a2e] text-white/60">
+            <div className="flex flex-col items-center gap-3">
+              <ImageIcon className="size-10" />
+              <span className="text-[13px]">Upload an image to preview</span>
+            </div>
+          </div>
+        )}
+
+        {/* Top bar — FB Story style */}
+        <div className="absolute top-0 inset-x-0 h-1 bg-white/30 z-10">
+          <div className="h-full bg-white w-1/3 rounded-r-full" />
+        </div>
+
+        {/* Top: profile + CTA */}
+        <div className="absolute top-5 inset-x-4 flex items-center gap-2 z-10">
+          <Avatar size={32} ring />
+          <div>
+            <span className="text-white text-[14px] font-semibold drop-shadow">
+              {BRAND_NAME}
+            </span>
+            <p className="text-[11px] text-white/70 drop-shadow">Just now</p>
+          </div>
+          <button className="ml-auto px-3 py-1 text-[12px] font-semibold text-black bg-white rounded-full">
+            Follow
+          </button>
+        </div>
+
+        {/* Bottom: caption */}
+        <div className="absolute inset-x-4 bottom-4 z-10 max-w-[85%]">
+          {body && (
+            <p className="text-[14px] text-white leading-snug drop-shadow whitespace-pre-line">
+              {body}
+            </p>
+          )}
+        </div>
+
+        {/* CTA button (FB Story style) */}
+        {caption.cta && (
+          <div className="absolute inset-x-0 bottom-16 flex justify-center z-10">
+            <button className="px-5 py-2 text-[13px] font-semibold text-black bg-white rounded-full shadow-lg">
+              {caption.cta}
+            </button>
+          </div>
+        )}
+      </div>
+      <p className="text-center text-[12px] text-[var(--body-subtle)] mt-2">
+        Facebook Story
+      </p>
+    </PhoneFrame>
+  );
+}
+
+// ============================================================
 // FACEBOOK REEL PREVIEW
 // ============================================================
 
@@ -920,11 +997,17 @@ function FacebookReelPost({
   imageSrc,
   isVideo,
   videoSrc,
+  audioName,
+  onAudioPlay,
+  isAudioPlaying,
 }: {
   caption: Caption;
   imageSrc: string | null;
   isVideo?: boolean;
   videoSrc?: string | null;
+  audioName?: string;
+  onAudioPlay?: () => void;
+  isAudioPlaying?: boolean;
 }) {
   const [muted, setMuted] = useState(true);
   const body = formatCaption(caption);
@@ -1031,8 +1114,30 @@ function FacebookReelPost({
           </button>
         )}
 
+        {/* Audio label */}
+        {audioName && (
+          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 max-w-[55%]">
+            <Music2 className="size-3.5 text-white shrink-0 drop-shadow" />
+            <span className="text-[12px] text-white font-medium truncate drop-shadow">
+              {audioName}
+            </span>
+            {onAudioPlay && (
+              <button
+                onClick={onAudioPlay}
+                className="shrink-0 size-6 rounded-full bg-white/20 backdrop-blur flex items-center justify-center"
+              >
+                {isAudioPlaying ? (
+                  <Pause className="size-3 text-white fill-white" />
+                ) : (
+                  <Play className="size-3 text-white fill-white ml-[1px]" />
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Caption at bottom */}
-        <div className="absolute inset-x-3 bottom-3 z-10 max-w-[70%]">
+        <div className="absolute inset-x-3 z-10 max-w-[70%]" style={{ bottom: audioName ? "3.5rem" : "0.75rem" }}>
           {body && (
             <p className="text-[14px] text-white leading-snug drop-shadow line-clamp-3 whitespace-pre-line">
               {body}
@@ -1299,12 +1404,24 @@ export function StoryPreview({
   isAudioPlaying?: boolean;
 }) {
   if (platform === "facebook") {
+    // Route: video → Reel, image → Story (different UIs)
+    if (isVideo) {
+      return (
+        <FacebookReelPost
+          caption={caption}
+          imageSrc={imageSrc}
+          isVideo={isVideo}
+          videoSrc={videoSrc}
+          audioName={audioName}
+          onAudioPlay={onAudioPlay}
+          isAudioPlaying={isAudioPlaying}
+        />
+      );
+    }
     return (
-      <FacebookReelPost
+      <FacebookStoryPost
         caption={caption}
         imageSrc={imageSrc}
-        isVideo={isVideo}
-        videoSrc={videoSrc}
       />
     );
   }

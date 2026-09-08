@@ -30,27 +30,21 @@ function extractMetric(
 }
 
 async function fetchInsightsForPost(postId: string): Promise<{
-  impressions: number;
-  impressionsOrganic: number;
-  reach: number;
-  engagedUsers: number;
   clicks: number;
 }> {
   try {
+    // `post_impressions`, `post_reach` and `post_engaged_users` are no longer
+    // valid metrics on the v25.0 page-post insights endpoint — only click and
+    // reaction metrics remain. Reach/impressions are therefore reported as 0.
     const res = await fetch(
-      `${GRAPH}/${V}/${postId}/insights?metric=post_impressions,post_impressions_organic,post_reach,post_engaged_users,post_clicks&period=lifetime&access_token=${TOKEN}`
+      `${GRAPH}/${V}/${postId}/insights?metric=post_clicks&period=lifetime&access_token=${TOKEN}`
     );
     const json = await res.json();
-    const data = json.data;
     return {
-      impressions: extractMetric(data, "post_impressions"),
-      impressionsOrganic: extractMetric(data, "post_impressions_organic"),
-      reach: extractMetric(data, "post_reach"),
-      engagedUsers: extractMetric(data, "post_engaged_users"),
-      clicks: extractMetric(data, "post_clicks"),
+      clicks: extractMetric(json.data, "post_clicks"),
     };
   } catch {
-    return { impressions: 0, impressionsOrganic: 0, reach: 0, engagedUsers: 0, clicks: 0 };
+    return { clicks: 0 };
   }
 }
 
@@ -79,6 +73,9 @@ export async function GET() {
     const posts = await Promise.all(
       feed.map(async (item) => {
         const insights = await fetchInsightsForPost(item.id);
+        const likes = item.reactions?.summary?.total_count ?? 0;
+        const comments = item.comments?.summary?.total_count ?? 0;
+        const shares = item.shares?.count ?? 0;
         return {
           id: item.id,
           platform: "facebook" as const,
@@ -88,13 +85,14 @@ export async function GET() {
           mediaType: "post",
           timestamp: item.created_time ?? "",
           metrics: {
-            likes: item.reactions?.summary?.total_count ?? 0,
-            comments: item.comments?.summary?.total_count ?? 0,
-            shares: item.shares?.count ?? 0,
-            reach: insights.reach,
-            impressions: insights.impressions,
+            likes,
+            comments,
+            shares,
+            reach: 0, // deprecated on v25.0 post insights
+            impressions: 0, // deprecated on v25.0 post insights
             saves: 0,
-            engagement: insights.engagedUsers,
+            engagement: likes + comments + shares,
+            clicks: insights.clicks,
           },
         };
       })

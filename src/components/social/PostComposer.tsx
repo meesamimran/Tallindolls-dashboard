@@ -146,10 +146,14 @@ interface PostComposerProps {
   onNext?: (data: {
     imageSrc: string | null;
     isVideo: boolean;
+    videoSrc: string | null;
     caption: Caption;
     selectedPreviewLabel: string;
     surface: string;
     targetPlatforms: string[];
+    carouselSlides?: { formatted: string | null; isVideo?: boolean; videoBlobUrl?: string | null }[];
+    carouselIdx?: number;
+    mediaFilesCount?: number;
   }) => void;
   onBack?: () => void;
   // Pre-fill from draft (when editing from History)
@@ -1400,10 +1404,14 @@ export default function PostComposer({
                   onNext({
                     imageSrc: previewImage,
                     isVideo,
+                    videoSrc: isVideo ? activeFile?.videoBlobUrl ?? null : null,
                     caption,
                     selectedPreviewLabel: selectedPreview.label,
                     surface: selectedPreview.surface,
                     targetPlatforms,
+                    carouselSlides: multiSlide ? previewSlides : undefined,
+                    carouselIdx: multiSlide ? activeSlideIdx : undefined,
+                    mediaFilesCount: mediaFiles.length,
                   })
                 }
                 disabled={!hasMedia}
@@ -1616,7 +1624,7 @@ function PreviewDropdown({
         <ChevronDown className="size-4" />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-[260px] bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-xl overflow-hidden">
+        <div className="absolute z-50 mt-1 w-[260px] bg-[var(--neutral-primary)] border border-[var(--border-default-strong)] rounded-[2px] shadow-2xl overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.id}

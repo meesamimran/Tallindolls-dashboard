@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, Megaphone, Package, LineChart,
   Activity, Bot, PenSquare, FileText, Settings,
-  PanelLeftClose, PanelLeft, Target, Lightbulb, Clock,
+  PanelLeftClose, PanelLeft, Target, Lightbulb, Clock, Sparkles, Zap,
 } from "lucide-react";
 
 interface NavItem {
@@ -30,6 +30,8 @@ const primaryNavItems: NavItem[] = [
 const secondaryNavItems: NavItem[] = [
   { label: "Content & Posts", icon: PenSquare, href: "/content" },
   { label: "History", icon: Clock, href: "/history" },
+  { label: "Story Detailing", icon: Sparkles, href: "/story-detailing" },
+  { label: "DM Automation", icon: Zap, href: "/dm-automation" },
   { label: "Strategy Agent", icon: Lightbulb, href: "/strategy" },
   { label: "Reports", icon: FileText, href: "/reports" },
   { label: "Settings", icon: Settings, href: "/settings" },

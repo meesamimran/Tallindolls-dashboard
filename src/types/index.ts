@@ -241,6 +241,10 @@ export interface ScheduledPost {
   imageDataUrl?: string;
   /** which surface it targets */
   surface?: "feed" | "story" | "ad";
+  /** server-side scheduled-posts.json task ID for cross-reference with cron status */
+  serverTaskId?: string;
+  /** server-reported permalink after cron publish */
+  permalink?: string;
 }
 
 // --- Strategy / Content Insights ---
@@ -250,9 +254,14 @@ export interface PostMetrics {
   comments: number;
   shares?: number;
   reach: number;
+  // Note: Meta deprecated the `impressions` metric for IG media (v22+) and
+  // FB page posts (v25.0), so this is now 0 for most posts.
   impressions: number;
   saves: number;
   engagement: number;
+  // Reels/video views (IG) and post clicks (FB) where available.
+  views?: number;
+  clicks?: number;
 }
 
 export interface PostInsight {

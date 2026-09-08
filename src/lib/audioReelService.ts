@@ -51,6 +51,8 @@ export interface AudioReelConfig {
   fbPageToken: string;
   /** Only publish to these platforms. Default: both */
   targetPlatforms?: ("instagram" | "facebook")[];
+  /** "reel" (default) or "story" */
+  mediaType?: "reel" | "story";
 }
 
 export interface AudioReelResult {
@@ -245,23 +247,29 @@ async function publishInstagramReel(params: {
   caption?: string;
   igUserId: string;
   token: string;
+  mediaType?: "reel" | "story";
 }): Promise<{ id: string; permalink: string }> {
-  const { videoUrl, audioName, caption, igUserId, token } = params;
+  const { videoUrl, audioName, caption, igUserId, token, mediaType = "reel" } = params;
+  const isStory = mediaType === "story";
 
-  // 1) Create container — CRITICAL: pass audio_name for custom audio title
+  // 1) Create container
+  const bodyParams: Record<string, string> = {
+    video_url: videoUrl,
+    access_token: token,
+  };
+
+  if (isStory) {
+    bodyParams.media_type = "STORIES";
+  } else {
+    bodyParams.media_type = "REELS";
+    bodyParams.audio_name = audioName;
+    bodyParams.caption = caption || "";
+    bodyParams.share_to_feed = "true";
+  }
+
   const containerRes = await fetch(
     `${GRAPH}/${GRAPH_VERSION}/${igUserId}/media`,
-    {
-      method: "POST",
-      body: new URLSearchParams({
-        media_type: "REELS",
-        video_url: videoUrl,
-        audio_name: audioName, // ← This displays the custom song name on the Reel
-        caption: caption || "",
-        share_to_feed: "true",
-        access_token: token,
-      }),
-    }
+    { method: "POST", body: new URLSearchParams(bodyParams) }
   );
   const containerJson = await containerRes.json();
   if (!containerRes.ok) {
@@ -501,6 +509,7 @@ export async function publishAudioReel(
           caption: config.caption,
           igUserId: config.igUserId,
           token: config.userToken,
+          mediaType: config.mediaType || "reel",
         })
       );
     }
