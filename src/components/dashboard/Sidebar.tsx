@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, TrendingUp, Megaphone, Package, LineChart,
-  Activity, Bot, PenSquare, FileText, Settings,
-  PanelLeftClose, PanelLeft, Target, Lightbulb, Clock, Sparkles, Zap,
+  PenSquare, FileText, Settings,
+  PanelLeftClose, PanelLeft, Lightbulb, Clock, Sparkles, Zap,
 } from "lucide-react";
 
 interface NavItem {
@@ -16,18 +15,7 @@ interface NavItem {
   badge?: string;
 }
 
-const primaryNavItems: NavItem[] = [
-  { label: "Overview", icon: LayoutDashboard, href: "/" },
-  { label: "Revenue Analytics", icon: TrendingUp, href: "/revenue" },
-  { label: "Marketing", icon: Megaphone, href: "/marketing" },
-  { label: "Inventory", icon: Package, href: "/inventory" },
-  { label: "Forecast", icon: LineChart, href: "/forecast" },
-  { label: "Trends", icon: Activity, href: "/trends" },
-  { label: "Agent Activity", icon: Bot, href: "/agents", badge: "3" },
-  { label: "Campaigns & Ads", icon: Target, href: "/campaigns" },
-];
-
-const secondaryNavItems: NavItem[] = [
+const navItems: NavItem[] = [
   { label: "Content & Posts", icon: PenSquare, href: "/content" },
   { label: "History", icon: Clock, href: "/history" },
   { label: "Story Detailing", icon: Sparkles, href: "/story-detailing" },
@@ -137,13 +125,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <NavSection items={primaryNavItems} collapsed={collapsed} />
-
-        {/* Separator */}
-        <div className={cn("border-t border-[var(--border-default)]", collapsed ? "my-2" : "pt-4 mt-4 mb-2")}>
-          {!collapsed && <NavSection items={secondaryNavItems} collapsed={false} />}
-          {collapsed && <NavSection items={secondaryNavItems} collapsed={true} />}
-        </div>
+        <NavSection items={navItems} collapsed={collapsed} />
       </nav>
 
       {/* User Footer — only when expanded */}
