@@ -6,7 +6,25 @@ import { type Caption, FeedPreview, StoryPreview, type SocialPlatform, type Prev
 import SongSearch, { type SongResult } from "./SongSearch";
 import ScheduleModal from "./ScheduleModal";
 import {
-  Send, Loader2, Calendar, ArrowLeft, Music2, Play, Pause, Monitor, Smartphone, CheckCircle2,
+  Send,
+  Loader2,
+  Calendar,
+  ArrowLeft,
+  Music2,
+  Play,
+  Pause,
+  Monitor,
+  Smartphone,
+  CheckCircle2,
+  Copy,
+  Check,
+  Sparkles,
+  Layers,
+  Eye,
+  Share2,
+  Info,
+  Clock,
+  FileText,
 } from "lucide-react";
 
 const CARD =
@@ -61,13 +79,31 @@ export default function PreviewScreen({
   const [showSchedule, setShowSchedule] = useState(false);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [draftSaved, setDraftSaved] = useState(false);
+  const [copiedCaption, setCopiedCaption] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const cleanField = (s: string) =>
     s.replace(/^(headline|primary\s*text|body|hashtags|cta|call\s*to\s*action):?\s*/i, "").trim();
-  const captionText = [cleanField(caption.headline), cleanField(caption.primaryText), caption.hashtags, cleanField(caption.cta)]
+
+  const captionText = [
+    cleanField(caption.headline),
+    cleanField(caption.primaryText),
+    caption.hashtags,
+    cleanField(caption.cta),
+  ]
     .filter(Boolean)
     .join("\n\n");
+
+  const wordCount = captionText ? captionText.split(/\s+/).filter(Boolean).length : 0;
+  const charCount = captionText.length;
+  const isReadyToPublish = Boolean(captionText && imageSrc && (!selectedSong || audioConsent));
+
+  const handleCopyCaption = () => {
+    if (!captionText) return;
+    navigator.clipboard.writeText(captionText);
+    setCopiedCaption(true);
+    setTimeout(() => setCopiedCaption(false), 2000);
+  };
 
   const handlePlayPause = () => {
     if (!selectedSong?.audioUrl) return;
@@ -95,203 +131,270 @@ export default function PreviewScreen({
   const multiSlide = (carouselSlides?.length ?? 0) > 1;
 
   return (
-    <div className={cn(CARD, "p-6 space-y-5")}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className={cn(CARD, "p-6 space-y-6")}>
+      {/* ── Top Navigation Bar ── */}
+      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-default)]">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--body)] hover:text-[var(--heading)] transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[13px] font-semibold text-[var(--body)] hover:text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-all"
         >
-          <ArrowLeft className="size-4" /> Back to Editor
+          <ArrowLeft className="size-4" /> Back to Compose
         </button>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-3">
           {draftSaved && (
-            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--fg-success)] animate-fade-in">
-              <CheckCircle2 className="size-3.5" /> Draft saved
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[2px] bg-[var(--success-soft)] text-[var(--fg-success)] text-[12px] font-semibold animate-fade-in border border-[var(--border-success)]">
+              <CheckCircle2 className="size-3.5" /> Draft Saved
             </span>
           )}
-          <span className="text-[12px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
-            Final Review &amp; Publish
-          </span>
+
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)]">
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                isReadyToPublish ? "bg-[var(--success)] animate-pulse" : "bg-[var(--warning)]"
+              )}
+            />
+            <span className="text-[12px] font-semibold text-[var(--heading)]">
+              {isReadyToPublish ? "Ready to Publish" : "Missing Requirements"}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* LEFT: Caption + Audio + Info */}
-        <div className="space-y-4">
-          {/* Caption */}
-          <div>
-            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-              Caption
-            </p>
-            <div className="p-3 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] max-h-[180px] overflow-y-auto">
+      {/* ── Main Two-Column Layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* ============================================================ */}
+        {/* LEFT COLUMN: Summary, Audio, Specifications (5 cols)        */}
+        {/* ============================================================ */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* Post Specifications Card */}
+          <div className="p-4 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[var(--body-subtle)] uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="size-3.5 text-[var(--brand)]" /> Post Specifications
+              </span>
+              <span className="text-[11px] text-[var(--body-subtle)]">
+                {charCount} chars · {wordCount} words
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[12px]">
+              <div className="p-2.5 rounded-[2px] bg-[var(--neutral-primary-soft)] border border-[var(--border-default)]">
+                <span className="text-[11px] text-[var(--body-subtle)] block font-medium">Placement</span>
+                <span className="font-semibold text-[var(--heading)] capitalize">
+                  {surface === "story" ? (isVideo ? "Reel / Story" : "Story") : "Feed Post"}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-[2px] bg-[var(--neutral-primary-soft)] border border-[var(--border-default)]">
+                <span className="text-[11px] text-[var(--body-subtle)] block font-medium">Media Type</span>
+                <span className="font-semibold text-[var(--heading)]">
+                  {multiSlide
+                    ? `Carousel (${carouselSlides?.length} slides)`
+                    : isVideo
+                      ? "Video / Reel"
+                      : "Single Image"}
+                </span>
+              </div>
+            </div>
+
+            {/* Target Platform Badges */}
+            <div className="pt-2 border-t border-[var(--border-default)] flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-medium text-[var(--body-subtle)]">Destinations:</span>
+              <div className="flex items-center gap-1.5">
+                {targetPlatforms.map((p) => (
+                  <span
+                    key={p}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[11px] font-semibold uppercase tracking-wider"
+                    style={
+                      p === "instagram"
+                        ? { backgroundColor: "rgba(217, 79, 176, 0.15)", color: "#D94FB0" }
+                        : { backgroundColor: "rgba(24, 119, 242, 0.15)", color: "#1877F2" }
+                    }
+                  >
+                    {p === "instagram" ? "📸 Instagram" : "🌐 Facebook"}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Caption Review Card */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-[var(--body-subtle)] uppercase tracking-wider">
+                Caption Preview
+              </p>
+              {captionText && (
+                <button
+                  onClick={handleCopyCaption}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--brand)] hover:underline"
+                >
+                  {copiedCaption ? <Check className="size-3" /> : <Copy className="size-3" />}
+                  {copiedCaption ? "Copied" : "Copy text"}
+                </button>
+              )}
+            </div>
+
+            <div className="p-4 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] max-h-[220px] overflow-y-auto">
               {captionText ? (
-                <p className="text-[13px] text-[var(--heading)] whitespace-pre-line leading-snug">
+                <p className="text-[13px] text-[var(--heading)] whitespace-pre-line leading-relaxed">
                   {captionText}
                 </p>
               ) : (
-                <p className="text-[13px] text-[var(--body-subtle)] italic">No caption yet</p>
+                <p className="text-[13px] text-[var(--body-subtle)] italic">No caption generated or written yet.</p>
               )}
             </div>
           </div>
 
-          {/* Audio Selection */}
-          <div>
-            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-              🎵 Audio (optional)
-            </p>
+          {/* Audio Selection & Sync Card */}
+          <div className="p-4 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[var(--body-subtle)] uppercase tracking-wider flex items-center gap-1.5">
+                <Music2 className="size-3.5 text-[var(--brand)]" /> Background Audio
+              </span>
+              {selectedSong && (
+                <span className="text-[10px] font-semibold text-[var(--brand)] uppercase tracking-wider">
+                  Audio Synced
+                </span>
+              )}
+            </div>
+
             <SongSearch onSelect={setSelectedSong} selectedSong={selectedSong} />
+
             {selectedSong && (
-              <div className="space-y-2">
-                <p className="text-[11px] text-[var(--body-subtle)]">
-                  Audio attached — visible in the preview on the right.
-                </p>
-                <label className="flex items-start gap-3 cursor-pointer p-3 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
+              <div className="space-y-2.5 pt-2 border-t border-[var(--border-default)]">
+                <div className="flex items-center justify-between p-2 rounded-[2px] bg-[var(--neutral-primary-soft)] border border-[var(--border-default)]">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <p className="text-[12px] font-semibold text-[var(--heading)] truncate">
+                      {selectedSong.songTitle}
+                    </p>
+                    <p className="text-[11px] text-[var(--body-subtle)] truncate">
+                      {selectedSong.artistName}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handlePlayPause}
+                    className="size-7 rounded-full bg-[var(--brand)] text-white flex items-center justify-center hover:opacity-90 transition-opacity"
+                  >
+                    {playing ? <Pause className="size-3 fill-white" /> : <Play className="size-3 fill-white ml-[1px]" />}
+                  </button>
+                </div>
+
+                <label className="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-[2px] bg-[var(--warning-soft)] border border-[var(--border-warning-subtle)]">
                   <input
                     type="checkbox"
                     checked={audioConsent}
                     onChange={(e) => setAudioConsent(e.target.checked)}
                     className="mt-0.5 size-4 accent-[var(--brand)] cursor-pointer shrink-0"
                   />
-                  <span className="text-[13px] text-[var(--fg-warning)] leading-snug font-medium">
-                    I understand this will be posted as a <strong>{surface === "story" ? (isVideo ? "Reel" : "Story") : "Feed post"}</strong> with the audio track
-                    &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot;.
+                  <span className="text-[12px] text-[var(--fg-warning)] leading-snug font-medium">
+                    I agree to attach &quot;{selectedSong.artistName} - {selectedSong.songTitle}&quot; to this publish task.
                   </span>
                 </label>
               </div>
             )}
           </div>
-
-          {/* Story caption hint */}
-          {surface === "story" && captionText && (
-            <p className="text-[11px] text-[var(--body-subtle)]">
-              Caption will appear as text overlay on your Story.
-            </p>
-          )}
-
-          {/* Publishing info */}
-          <div>
-            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider mb-1.5">
-              Publishing to
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <span className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)]">
-                {surface === "story" ? (isVideo ? "Reel" : "Story") : "Feed"}
-              </span>
-              {targetPlatforms.map((p) => (
-                <span
-                  key={p}
-                  className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--neutral-secondary-medium)] text-[var(--body)] capitalize border border-[var(--border-default)]"
-                >
-                  {p}
-                </span>
-              ))}
-              {multiSlide && (
-                <span className="px-2.5 py-1 text-[12px] font-medium rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)]">
-                  {carouselSlides?.length} slides
-                </span>
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* RIGHT: Live Preview */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
-              Live Preview
-            </p>
-            {/* Device toggle for feed previews */}
+        {/* ============================================================ */}
+        {/* RIGHT COLUMN: Interactive Live Preview Stage (7 cols)        */}
+        {/* ============================================================ */}
+        <div className="lg:col-span-7 space-y-3">
+          {/* Stage Controls Toolbar */}
+          <div className="flex items-center justify-between flex-wrap gap-2 pb-1">
+            {/* Selected preview label (matches the composer dropdown) */}
+            <span className="text-[12px] font-semibold text-[var(--heading)] inline-flex items-center gap-2">
+              <span className="size-2 rounded-full bg-[var(--brand)]" />
+              {selectedPreviewLabel || `${platform} ${surface === "story" ? "Story" : "Feed"}`} Preview
+            </span>
+
+            {/* Device Switcher (Desktop vs Mobile) */}
             {surface === "feed" && (
-              <div className="inline-flex rounded-[2px] border border-[var(--border-default)] overflow-hidden">
+              <div className="inline-flex rounded-[2px] border border-[var(--border-default)] overflow-hidden bg-[var(--neutral-secondary-medium)]">
                 <button
                   onClick={() => setDevice("desktop")}
-                  title="Desktop view"
+                  title="Desktop Web Preview"
                   className={cn(
-                    "px-1.5 py-1 transition-colors",
+                    "px-2.5 py-1 inline-flex items-center gap-1.5 text-[12px] font-semibold transition-colors",
                     device === "desktop"
                       ? "bg-[var(--brand-softer)] text-[var(--brand)]"
-                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-primary-soft)]"
                   )}
                 >
-                  <Monitor className="size-3.5" />
+                  <Monitor className="size-3.5" /> Desktop
                 </button>
                 <button
                   onClick={() => setDevice("mobile")}
-                  title="Mobile view"
+                  title="Mobile App Preview"
                   className={cn(
-                    "px-1.5 py-1 transition-colors",
+                    "px-2.5 py-1 inline-flex items-center gap-1.5 text-[12px] font-semibold transition-colors",
                     device === "mobile"
                       ? "bg-[var(--brand-softer)] text-[var(--brand)]"
-                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                      : "text-[var(--body-subtle)] hover:bg-[var(--neutral-primary-soft)]"
                   )}
                 >
-                  <Smartphone className="size-3.5" />
+                  <Smartphone className="size-3.5" /> Mobile
                 </button>
               </div>
             )}
           </div>
 
-          <div className={cn(
-            "bg-[var(--neutral-secondary-medium)] rounded-[2px] p-4",
-            targetPlatforms.length > 1 && surface === "feed" ? "grid grid-cols-1 xl:grid-cols-2 gap-4" : "flex justify-center"
-          )}>
-            {targetPlatforms.map((p) => {
-              const pv = p as "instagram" | "facebook";
-              return (
-                <div key={p} className="flex justify-center min-w-0">
-                  {surface === "story" ? (
-                    <StoryPreview
-                      platform={pv}
-                      caption={caption}
-                      imageSrc={imageSrc}
-                      isVideo={isVideo}
-                      videoSrc={videoSrc ?? null}
-                      audioName={audioName}
-                      onAudioPlay={selectedSong ? handlePlayPause : undefined}
-                      isAudioPlaying={playing}
-                    />
-                  ) : (
-                    <FeedPreview
-                      platform={pv}
-                      device={device}
-                      caption={caption}
-                      imageSrc={imageSrc}
-                      isVideo={isVideo}
-                      videoSrc={videoSrc ?? null}
-                      carouselSlides={carouselSlides}
-                      carouselIdx={carouselIdx}
-                      audioName={audioName}
-                      onAudioPlay={selectedSong ? handlePlayPause : undefined}
-                      isAudioPlaying={playing}
-                    />
-                  )}
-                </div>
-              );
-            })}
+          {/* Elevated Preview Canvas with Ambient Backing — single preview */}
+          <div className="relative rounded-[2px] border border-[var(--border-default)] bg-[var(--neutral-secondary-medium)] p-4 sm:p-6 overflow-hidden min-h-[520px] flex items-start justify-center">
+            <div className="w-full flex justify-center animate-fade-in">
+              {surface === "story" ? (
+                <StoryPreview
+                  platform={platform}
+                  caption={caption}
+                  imageSrc={imageSrc}
+                  isVideo={isVideo}
+                  videoSrc={videoSrc ?? null}
+                  audioName={audioName}
+                  onAudioPlay={selectedSong ? handlePlayPause : undefined}
+                  isAudioPlaying={playing}
+                />
+              ) : (
+                <FeedPreview
+                  platform={platform}
+                  device={device}
+                  caption={caption}
+                  imageSrc={imageSrc}
+                  isVideo={isVideo}
+                  videoSrc={videoSrc ?? null}
+                  carouselSlides={carouselSlides}
+                  carouselIdx={carouselIdx}
+                  audioName={audioName}
+                  onAudioPlay={selectedSong ? handlePlayPause : undefined}
+                  isAudioPlaying={playing}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom Actions */}
-      <div className="flex items-center gap-3 pt-3 border-t border-[var(--border-default)]">
+      {/* ── Bottom Final Action Bar ── */}
+      <div className="flex items-center gap-3 pt-4 border-t border-[var(--border-default)] flex-wrap">
         <button
           onClick={handleSaveDraft}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
         >
-          Save Draft
+          Save as Draft
         </button>
+
         <button
           onClick={() => setShowSchedule(true)}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
         >
-          <Calendar className="size-4" />
-          Schedule
+          <Calendar className="size-4 text-[var(--brand)]" />
+          Schedule Date…
         </button>
+
         <button
           onClick={() => onPublish(selectedSong)}
-          disabled={hasActiveTasks || !captionText || !imageSrc || (!!selectedSong && !audioConsent)}
-          className="inline-flex items-center gap-2 px-6 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50 ml-auto"
+          disabled={hasActiveTasks || !isReadyToPublish}
+          className="inline-flex items-center gap-2 px-6 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-all hover:opacity-90 disabled:opacity-50 ml-auto shadow-md"
           style={GRADIENT_BRAND}
         >
           {hasActiveTasks || isPublishing ? (
@@ -299,7 +402,7 @@ export default function PreviewScreen({
           ) : (
             <Send className="size-4" />
           )}
-          {hasActiveTasks || isPublishing ? "Publishing…" : "Approve & Publish"}
+          {hasActiveTasks || isPublishing ? "Publishing Task Active…" : "Approve & Publish Live"}
         </button>
       </div>
 
@@ -311,3 +414,4 @@ export default function PreviewScreen({
     </div>
   );
 }
+

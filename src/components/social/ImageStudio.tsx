@@ -125,39 +125,79 @@ export default function ImageStudio({
   // ── Empty state: dropzone ──
   if (!hasFiles) {
     return (
-      <div className="bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-[var(--shadow-xs)] p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <ImageIcon className="size-5 text-[var(--brand)] shrink-0 mt-0.5" />
-          <div>
-            <h2 className="text-[16px] font-semibold text-[var(--heading)]">
-              Media
-            </h2>
-            <p className="text-[13px] text-[var(--body)] mt-0.5">
-              Upload images or videos — auto-formatted for every placement
-            </p>
+      <div className="bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-[var(--shadow-xs)] p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="size-8 rounded-[2px] flex items-center justify-center text-white"
+              style={GRADIENT_BRAND}
+            >
+              <ImageIcon className="size-4" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-semibold text-[var(--heading)]">
+                Media Studio
+              </h2>
+              <p className="text-[12px] text-[var(--body-subtle)] mt-0.5">
+                Auto-formatted for every social placement
+              </p>
+            </div>
+          </div>
+          {/* Format badges */}
+          <div className="hidden sm:flex items-center gap-1.5 flex-wrap justify-end">
+            {["JPG", "PNG", "WebP", "MP4", "MOV"].map((fmt) => (
+              <span
+                key={fmt}
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded-[2px] bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] border border-[var(--border-default)] uppercase tracking-wide"
+              >
+                {fmt}
+              </span>
+            ))}
+            <span className="text-[10px] text-[var(--body-subtle)] font-medium ml-1">
+              up to 100 MB
+            </span>
           </div>
         </div>
+
+        {/* Dropzone */}
         <label
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
             handleFiles(e.dataTransfer.files);
           }}
-          className="flex flex-col items-center justify-center gap-3 py-10 px-6 rounded-[2px] border-2 border-dashed border-[var(--border-default-medium)] cursor-pointer hover:border-[var(--brand)] hover:bg-[var(--brand-softer)] transition-colors text-center"
+          className="flex flex-col items-center justify-center gap-4 py-12 px-6 rounded-[2px] border-2 border-dashed border-[var(--border-default-medium)] cursor-pointer hover:border-[var(--brand)] hover:bg-[var(--brand-softer)] transition-all text-center group"
         >
           <div
-            className="size-12 rounded-full flex items-center justify-center"
+            className="size-14 rounded-full flex items-center justify-center shadow-md transition-transform group-hover:scale-105"
             style={GRADIENT_BRAND}
           >
-            <Upload className="size-5 text-white" />
+            <Upload className="size-6 text-white" />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <p className="text-[15px] font-semibold text-[var(--heading)]">
-              Drop images or videos here
+              Drop media here or click to browse
             </p>
-            <p className="text-[13px] text-[var(--body-subtle)] mt-1">
-              Select multiple images for a carousel · Video → auto Reel
+            <p className="text-[13px] text-[var(--body-subtle)]">
+              Single image · Multi-image carousel · Video reel
             </p>
+          </div>
+          {/* Aspect ratio hints */}
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {[
+              { ratio: "1:1", label: "Feed", color: "text-[#E1306C]" },
+              { ratio: "4:5", label: "Portrait", color: "text-[#833AB4]" },
+              { ratio: "9:16", label: "Story / Reel", color: "text-[#1877F2]" },
+            ].map((r) => (
+              <div
+                key={r.ratio}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)]"
+              >
+                <span className={`text-[11px] font-bold ${r.color}`}>{r.ratio}</span>
+                <span className="text-[10px] text-[var(--body-subtle)]">{r.label}</span>
+              </div>
+            ))}
           </div>
           <input
             ref={inputRef}
@@ -176,31 +216,43 @@ export default function ImageStudio({
   return (
     <div className="bg-[var(--neutral-primary-soft)] border border-[var(--border-default)] rounded-[2px] shadow-[var(--shadow-xs)] p-5 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-start gap-3">
-          <ImageIcon className="size-5 text-[var(--brand)] shrink-0 mt-0.5" />
+      <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-[var(--border-default)]">
+        <div className="flex items-center gap-3">
+          <div
+            className="size-8 rounded-[2px] flex items-center justify-center text-white"
+            style={GRADIENT_BRAND}
+          >
+            <ImageIcon className="size-4" />
+          </div>
           <div>
-            <h2 className="text-[16px] font-semibold text-[var(--heading)]">
-              Media
-            </h2>
-            <p className="text-[13px] text-[var(--body)] mt-0.5">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-semibold text-[var(--heading)]">
+                Media Studio
+              </h2>
+              {files.length > 1 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)] border border-[var(--brand)]/20 uppercase tracking-wider">
+                  Carousel
+                </span>
+              )}
+            </div>
+            <p className="text-[12px] text-[var(--body-subtle)] mt-0.5">
               {files.length} file{files.length !== 1 ? "s" : ""} ·{" "}
               {files.some((f) => f.isVideo) ? "🎬 Video detected" : "📷 Images"}
-              {files.length > 1 ? " — Carousel mode" : ""}
+              {files.length > 1 ? ` · ${files.length} slides` : ""}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => inputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 shadow-xs"
             style={GRADIENT_BRAND}
           >
             <Upload className="size-3.5" /> Add more
           </button>
           <button
             onClick={onReset}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[var(--body-subtle)] rounded-[2px] hover:text-[var(--danger)] hover:bg-[var(--neutral-secondary-medium)] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[var(--body-subtle)] rounded-[2px] hover:text-[var(--danger)] hover:bg-[var(--neutral-secondary-medium)] transition-colors border border-[var(--border-default)]"
           >
             <Trash2 className="size-3.5" /> Clear all
           </button>
@@ -221,7 +273,7 @@ export default function ImageStudio({
       {/* Status */}
       {statusMessage && (
         <div
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[12px] font-medium animate-pulse"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[12px] font-medium animate-pulse border border-[var(--brand)]/20"
           style={{
             backgroundColor: "var(--brand-softer)",
             color: "var(--brand)",
@@ -233,18 +285,21 @@ export default function ImageStudio({
 
       {/* ── Thumbnail Strip ── */}
       <div className="flex flex-wrap gap-3">
-        {files.map((f) => {
+        {files.map((f, fileIdx) => {
           const isEditing = editingFileId === f.id;
+          // Determine aspect ratio tag based on crops available
+          const hasStory = !!f.crops?.["story"];
+          const ratioTag = f.isVideo ? "9:16" : hasStory ? "9:16" : "1:1";
           return (
             <div
               key={f.id}
               className={cn(
-                "shrink-0 rounded-[2px] border transition-all overflow-hidden group",
+                "shrink-0 rounded-[2px] border-2 transition-all overflow-hidden group",
                 isEditing
-                  ? "border-[var(--brand)] ring-1 ring-[var(--brand)] bg-[var(--brand-softer)]"
-                  : "border-[var(--border-default)] bg-[var(--neutral-secondary-medium)] hover:border-[var(--border-default-medium)]"
+                  ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/20 bg-[var(--brand-softer)]"
+                  : "border-[var(--border-default)] bg-[var(--neutral-secondary-medium)] hover:border-[var(--brand)]/40"
               )}
-              style={{ width: 180 }}
+              style={{ width: 156 }}
             >
               {/* Thumbnail image */}
               <div
@@ -261,9 +316,11 @@ export default function ImageStudio({
                 ) : (
                   <ImageIcon className="size-8 text-[var(--body-subtle)]" />
                 )}
+
+                {/* Video badge */}
                 {f.isVideo && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <div className="size-10 rounded-full bg-black/60 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                    <div className="size-10 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
                       <svg
                         className="size-4 text-white ml-0.5"
                         viewBox="0 0 24 24"
@@ -274,18 +331,31 @@ export default function ImageStudio({
                     </div>
                   </div>
                 )}
+
+                {/* Slide index badge */}
+                {files.length > 1 && (
+                  <div className="absolute top-1.5 left-1.5 size-5 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
+                    {fileIdx + 1}
+                  </div>
+                )}
+
+                {/* Aspect ratio badge */}
+                <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-[2px] bg-black/60 text-white text-[9px] font-bold tracking-wide backdrop-blur-sm">
+                  {ratioTag}
+                </div>
+
                 {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
                   <button
                     onClick={() => onEditFile(f.id)}
-                    className="size-8 rounded-full bg-white/90 flex items-center justify-center hover:bg-white transition-colors shadow-md"
-                    title="Edit crop"
+                    className="size-8 rounded-full bg-white/95 flex items-center justify-center hover:bg-white transition-colors shadow-lg"
+                    title="Edit crop & focal point"
                   >
                     <PenLine className="size-3.5 text-[#262626]" />
                   </button>
                   <button
                     onClick={() => onRemoveFile(f.id)}
-                    className="size-8 rounded-full bg-white/90 flex items-center justify-center hover:bg-white transition-colors shadow-md"
+                    className="size-8 rounded-full bg-white/95 flex items-center justify-center hover:bg-white transition-colors shadow-lg"
                     title="Remove"
                   >
                     <X className="size-3.5 text-[#ed4956]" />
@@ -296,45 +366,48 @@ export default function ImageStudio({
               {/* File info */}
               <div className="p-2 space-y-1">
                 <p
-                  className="text-[12px] font-medium text-[var(--heading)] truncate"
+                  className="text-[11px] font-semibold text-[var(--heading)] truncate"
                   title={f.file.name}
                 >
                   {f.file.name}
                 </p>
-                <div className="flex items-center gap-2 text-[11px] text-[var(--body-subtle)]">
-                  {f.width && f.height ? (
-                    <span>
-                      {f.width}×{f.height}
-                    </span>
-                  ) : (
-                    <span>{fmtSize(f.file.size)}</span>
-                  )}
-                  {f.isVideo && f.duration && (
-                    <span className="flex items-center gap-0.5">
-                      <Film className="size-2.5" />
-                      {fmtDuration(f.duration)}
-                    </span>
-                  )}
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--body-subtle)]">
+                    {f.width && f.height ? (
+                      <span>{f.width}×{f.height}</span>
+                    ) : (
+                      <span>{fmtSize(f.file.size)}</span>
+                    )}
+                    {f.isVideo && f.duration && (
+                      <span className="flex items-center gap-0.5">
+                        <Film className="size-2.5" />
+                        {fmtDuration(f.duration)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-bold text-[var(--body-subtle)] uppercase">
+                    {fmtSize(f.file.size)}
+                  </span>
                 </div>
                 {/* Action buttons */}
                 <div className="flex items-center gap-1 pt-1 border-t border-[var(--border-default)]">
                   <button
                     onClick={() => onEditFile(f.id)}
                     className={cn(
-                      "flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium rounded-[2px] transition-colors",
+                      "flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-[2px] transition-colors",
                       isEditing
                         ? "text-white"
                         : "text-[var(--body)] hover:bg-[var(--neutral-tertiary)]"
                     )}
                     style={isEditing ? GRADIENT_BRAND : undefined}
                   >
-                    <Crop className="size-3" /> Edit
+                    <Crop className="size-2.5" /> Crop
                   </button>
                   <button
                     onClick={() => onRemoveFile(f.id)}
-                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium text-[var(--body)] rounded-[2px] hover:text-[var(--danger)] hover:bg-[var(--neutral-tertiary)] transition-colors"
+                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-semibold text-[var(--body)] rounded-[2px] hover:text-[var(--danger)] hover:bg-[var(--neutral-tertiary)] transition-colors"
                   >
-                    <Trash2 className="size-3" /> Remove
+                    <Trash2 className="size-2.5" /> Remove
                   </button>
                 </div>
               </div>

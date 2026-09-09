@@ -332,11 +332,48 @@ export default function ContentPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 space-y-6">
-      <div>
-        <h1 className="text-[28px] font-semibold text-[var(--heading)]">Content &amp; Posts</h1>
-        <p className="text-[14px] text-[var(--body)] mt-1">
-          Upload any image or video — we auto-detect the format. Single, reel, or carousel.
-        </p>
+      {/* ── Page Header ── */}
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-[26px] font-bold text-[var(--heading)] tracking-tight">
+            Content &amp; Posts
+          </h1>
+          <p className="text-[14px] text-[var(--body-subtle)] mt-1">
+            Create, preview, and publish to Instagram &amp; Facebook — AI-powered copy in your brand voice
+          </p>
+        </div>
+
+        {/* Mode switcher */}
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-semibold border transition-all",
+              mode === "single"
+                ? "border-[var(--brand)] text-white"
+                : "border-[var(--border-default)] text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)]"
+            )}
+            style={mode === "single" ? GRADIENT_BRAND : undefined}
+          >
+            <ImageIcon className="size-3.5" />
+            Single / Reel
+          </div>
+          {mode === "single" && (
+            <button
+              onClick={() => setMode("carousel")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-semibold bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] hover:text-[var(--heading)] border border-[var(--border-default)] transition-colors"
+            >
+              <Images className="size-3.5" /> Switch to Carousel
+            </button>
+          )}
+          {mode === "carousel" && (
+            <button
+              onClick={() => { setMode("single"); setPendingCarouselFiles(null); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-semibold bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] hover:text-[var(--heading)] border border-[var(--border-default)] transition-colors"
+            >
+              ← Back to Single
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Success Toast */}
@@ -350,40 +387,61 @@ export default function ContentPage() {
         </div>
       )}
 
-      {/* Mode + Step indicator */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-medium"
-          style={{ backgroundColor: mode === "single" ? "var(--brand-softer)" : "var(--neutral-secondary-medium)", color: mode === "single" ? "var(--brand)" : "var(--body-subtle)" }}>
-          <ImageIcon className="size-3.5" /> {mode === "single" ? "Single / Reel" : "Single"}
+      {/* ── Two-Step Workflow Progress ── */}
+      <div className="flex items-center gap-0">
+        {/* Step 1 */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-l-[2px] border text-[12px] font-semibold transition-all",
+            step === "composer"
+              ? "text-white border-transparent shadow-xs"
+              : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)] border-[var(--border-default)]"
+          )}
+          style={step === "composer" ? GRADIENT_BRAND : undefined}
+        >
+          <span
+            className={cn(
+              "size-5 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0",
+              step === "composer"
+                ? "bg-white/30 text-white"
+                : "bg-[var(--neutral-tertiary)] text-[var(--body-subtle)]"
+            )}
+          >
+            1
+          </span>
+          <span>Compose &amp; Edit</span>
         </div>
-        {mode === "single" && (
-          <button onClick={() => setMode("carousel")}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-medium bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] hover:text-[var(--heading)] transition-colors">
-            <Images className="size-3.5" /> Switch to Carousel
-          </button>
-        )}
-        {mode === "carousel" && (
-          <button onClick={() => { setMode("single"); setPendingCarouselFiles(null); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[12px] font-medium bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] hover:text-[var(--heading)] transition-colors">
-            ← Back to Single
-          </button>
-        )}
 
-        {/* Step indicator */}
-        <div className="ml-auto flex items-center gap-2">
-          <span className={cn(
-            "px-2.5 py-1 text-[11px] font-semibold rounded-[2px]",
-            step === "composer" ? "text-white" : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)]"
-          )} style={step === "composer" ? GRADIENT_BRAND : undefined}>
-            1. Compose
+        {/* Connector */}
+        <div
+          className={cn(
+            "h-[2px] w-8 shrink-0",
+            step === "preview" ? "" : "bg-[var(--border-default)]"
+          )}
+          style={step === "preview" ? GRADIENT_BRAND : undefined}
+        />
+
+        {/* Step 2 */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-r-[2px] border text-[12px] font-semibold transition-all",
+            step === "preview"
+              ? "text-white border-transparent shadow-xs"
+              : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)] border-[var(--border-default)]"
+          )}
+          style={step === "preview" ? GRADIENT_BRAND : undefined}
+        >
+          <span
+            className={cn(
+              "size-5 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0",
+              step === "preview"
+                ? "bg-white/30 text-white"
+                : "bg-[var(--neutral-tertiary)] text-[var(--body-subtle)]"
+            )}
+          >
+            2
           </span>
-          <span className="text-[var(--body-subtle)]">→</span>
-          <span className={cn(
-            "px-2.5 py-1 text-[11px] font-semibold rounded-[2px]",
-            step === "preview" ? "text-white" : "text-[var(--body-subtle)] bg-[var(--neutral-secondary-medium)]"
-          )} style={step === "preview" ? GRADIENT_BRAND : undefined}>
-            2. Review &amp; Publish
-          </span>
+          <span>Review &amp; Publish</span>
         </div>
       </div>
 
@@ -455,12 +513,12 @@ export default function ContentPage() {
         <div className="space-y-2">
           {publishTasks.map((task) => (
             <div key={task.id} className={cn(
-              "flex items-center gap-3 pl-4 pr-2 py-3 rounded-[2px] animate-fade-in",
+              "flex items-center gap-3 pl-4 pr-2 py-3 rounded-[2px] animate-fade-in border shadow-xs",
               task.status === "processing"
-                ? "bg-[var(--neutral-primary-soft)] border-l-[3px] border-l-[var(--brand)]"
+                ? "bg-[var(--neutral-primary-soft)] border-l-[3px] border-l-[var(--brand)] border-[var(--border-default)]"
                 : task.status === "success"
-                  ? "bg-[var(--success)] text-white"
-                  : "bg-[var(--danger)] text-white"
+                  ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                  : "bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400"
             )}>
               {task.status === "processing" ? (
                 <Loader2 className="size-4 text-[var(--brand)] animate-spin shrink-0" />
@@ -472,13 +530,13 @@ export default function ContentPage() {
               <p className="text-[13px] font-medium flex-1 leading-snug">{task.message}</p>
               {task.url && (
                 <a href={task.url} target="_blank" rel="noopener noreferrer"
-                  className="shrink-0 text-[12px] font-semibold px-2 py-1 rounded-[2px] bg-white/20 hover:bg-white/30 text-white transition-colors">
-                  View
+                  className="shrink-0 inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-[2px] bg-[var(--neutral-secondary-medium)] hover:bg-[var(--brand-softer)] text-[var(--brand)] border border-[var(--border-default)] transition-colors">
+                  <ExternalLink className="size-3" /> View Post
                 </a>
               )}
               {task.status !== "processing" && (
                 <button onClick={() => dismissPublishTask(task.id)}
-                  className="shrink-0 p-1 rounded-[2px] hover:bg-white/20 text-white/70 hover:text-white transition-colors">
+                  className="shrink-0 p-1.5 rounded-[2px] hover:bg-[var(--neutral-secondary-medium)] text-[var(--body-subtle)] hover:text-[var(--heading)] transition-colors">
                   <X className="size-3.5" />
                 </button>
               )}

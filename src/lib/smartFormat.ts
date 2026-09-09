@@ -74,12 +74,15 @@ async function cloudinaryAiExpand(
 
 async function replicateOutpaint(
   imageDataUrl: string,
+  maskDataUrl: string,
+  width: number,
+  height: number,
   prompt: string
 ): Promise<string> {
   const res = await fetch("/api/outpaint", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ imageDataUrl, prompt }),
+    body: JSON.stringify({ imageDataUrl, maskDataUrl, width, height, prompt }),
   });
   const json = await res.json();
   if (json.available === false) throw new Error("REPLICATE_UNAVAILABLE");
@@ -100,6 +103,8 @@ export async function formatImageSmart(
   opts?: {
     onStage?: (stage: string) => void;
     description?: string;
+    focusX?: number;
+    focusY?: number;
   }
 ): Promise<SmartResult> {
   const img = await loadImage(originalSrc);
@@ -126,7 +131,9 @@ export async function formatImageSmart(
 
   // --- tier 3: large difference → AI expand ---
 
-  // Try Replicate first (premium, better quality) if token is likely set
+  // Try Replicate first (premium, better quality) if token is likely set.
+  // Build a padded canvas + mask so SD-inpainting fills ONLY the new area
+  // while preserving the original model untouched.
   try {
     opts?.onStage?.("AI expand (Replicate)…");
     const prompt = [
@@ -135,9 +142,23 @@ export async function formatImageSmart(
     ]
       .filter(Boolean)
       .join(", ");
-    const out = await replicateOutpaint(contain, prompt);
+    const { buildOutpaintInput, scaleToSize } = await import("./imageFormats");
+    const inp = buildOutpaintInput(
+      img,
+      preset.width / preset.height,
+      opts?.focusX ?? 0.5,
+      opts?.focusY ?? 0.5
+    );
+    const out = await replicateOutpaint(
+      inp.image,
+      inp.mask,
+      inp.width,
+      inp.height,
+      prompt
+    );
+    const final = await scaleToSize(out, preset.width, preset.height);
     opts?.onStage?.("");
-    return { dataUrl: out, method: "outpainting" };
+    return { dataUrl: final, method: "outpainting" };
   } catch {
     // Replicate unavailable (no token or no credit) → try Cloudinary free tier
   }

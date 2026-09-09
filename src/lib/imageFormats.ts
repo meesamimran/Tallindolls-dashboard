@@ -456,3 +456,115 @@ export function fileToThumbnailDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+// ------------------------------------------------------------
+// Outpainting ("magic expand") input builder.
+// Builds a padded canvas + a mask for Replicate SD-inpainting:
+//   - image: original placed (contain) on the target canvas, padding black
+//   - mask:  white where padding (to fill), black where original (preserve)
+// Model dims are returned in a size that is a multiple of 64 and ≤1024
+// (the SD-inpainting hard limits) while staying close to the target ratio.
+// ------------------------------------------------------------
+
+export interface OutpaintInput {
+  image: string;
+  mask: string;
+  width: number;
+  height: number;
+}
+
+/** Largest width×height (multiple of 64, ≤1024) closest to the given ratio. */
+export function nearestModelSize(ratio: number): { width: number; height: number } {
+  const MAX = 1024;
+  const STEP = 64;
+  let best = { width: 512, height: 512 };
+  let bestErr = Infinity;
+
+  for (let h = STEP; h <= MAX; h += STEP) {
+    const w = Math.round((h * ratio) / STEP) * STEP;
+    if (w < STEP || w > MAX) continue;
+    const err = Math.abs(w / h - ratio);
+    if (err < bestErr) {
+      bestErr = err;
+      best = { width: w, height: h };
+    }
+  }
+  for (let w = STEP; w <= MAX; w += STEP) {
+    const h = Math.round((w / ratio) / STEP) * STEP;
+    if (h < STEP || h > MAX) continue;
+    const err = Math.abs(w / h - ratio);
+    if (err < bestErr) {
+      bestErr = err;
+      best = { width: w, height: h };
+    }
+  }
+  return best;
+}
+
+export function buildOutpaintInput(
+  img: HTMLImageElement,
+  targetRatio: number,
+  focusX = 0.5,
+  focusY = 0.5
+): OutpaintInput {
+  const { width, height } = nearestModelSize(targetRatio);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context unavailable");
+  ctx.imageSmoothingQuality = "high";
+
+  // Black background — the masked (white) area is what the model regenerates.
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, width, height);
+
+  // Contain-fit the original into the model canvas, positioned by focus.
+  const srcRatio = img.width / img.height;
+  const tgtRatio = width / height;
+  let dw: number;
+  let dh: number;
+  if (srcRatio > tgtRatio) {
+    dw = width;
+    dh = width / srcRatio;
+  } else {
+    dh = height;
+    dw = height * srcRatio;
+  }
+  const dx = clamp((width - dw) * focusX, 0, width - dw);
+  const dy = clamp((height - dh) * focusY, 0, height - dh);
+  ctx.drawImage(img, dx, dy, dw, dh);
+
+  // Mask: white everywhere, then black over the original's region.
+  const mask = document.createElement("canvas");
+  mask.width = width;
+  mask.height = height;
+  const mctx = mask.getContext("2d");
+  if (!mctx) throw new Error("Canvas 2D context unavailable");
+  mctx.fillStyle = "#ffffff";
+  mctx.fillRect(0, 0, width, height);
+  mctx.fillStyle = "#000000";
+  mctx.fillRect(dx, dy, dw, dh);
+
+  return {
+    image: canvas.toDataURL("image/jpeg", 0.92),
+    mask: mask.toDataURL("image/png"),
+    width,
+    height,
+  };
+}
+
+/** Scale a data-URL image to an exact pixel size (no crop). */
+export function scaleToSize(src: string, width: number, height: number): Promise<string> {
+  return loadImage(src).then((img) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas 2D context unavailable");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  });
+}

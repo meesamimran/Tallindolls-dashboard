@@ -229,33 +229,19 @@ export default function AudioReelPage() {
             />
           </div>
 
-          {/* Song Search */}
+          {/* Song Search — temporarily disabled (no ffmpeg on serverless) */}
           <div>
             <label className="block text-[12px] font-medium text-[var(--body-subtle)] mb-1.5">
               Song Name
             </label>
-            <div className="flex gap-2">
-              <input
-                value={songName}
-                onChange={(e) => setSongName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="e.g. Coldplay Yellow"
-                className="flex-1 px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
-                style={INPUT_STYLE}
-              />
-              <button
-                onClick={handleSearch}
-                disabled={searching || !songName.trim()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded-[2px] disabled:opacity-50 transition-opacity"
-                style={GRADIENT_BRAND}
-              >
-                {searching ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Search className="size-3.5" />
-                )}
-                Search
-              </button>
+            <div
+              title="This feature is temporarily unavailable due to low resources."
+              className="flex items-center gap-2 px-3 py-2 rounded-[2px] border border-[var(--border-default-medium)] bg-[var(--neutral-secondary-medium)] opacity-70 cursor-not-allowed"
+            >
+              <Music2 className="size-3.5 text-[var(--body-subtle)] shrink-0" />
+              <span className="text-[13px] text-[var(--body-subtle)]">
+                This feature is temporarily unavailable due to low resources.
+              </span>
             </div>
           </div>
 

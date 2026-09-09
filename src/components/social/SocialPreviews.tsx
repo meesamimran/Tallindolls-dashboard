@@ -31,6 +31,12 @@ import {
   PlusSquare,
   Film,
   User,
+  Check,
+  Camera,
+  Compass,
+  Lock,
+  RotateCw,
+  Sparkles,
 } from "lucide-react";
 
 // ── Public types (backward-compatible exports) ──
@@ -54,29 +60,96 @@ const GRADIENT_BRAND: React.CSSProperties = {
   background: "linear-gradient(135deg, #C8399C 0%, #7C3AED 100%)",
 };
 
+const IG_STORY_GRADIENT =
+  "linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)";
+
 // ── Helpers ──
 
-function Avatar({ size = 40, ring = false }: { size?: number; ring?: boolean }) {
+function Avatar({
+  size = 40,
+  ring = false,
+  platform = "instagram",
+}: {
+  size?: number;
+  ring?: boolean;
+  platform?: SocialPlatform;
+}) {
   const el = (
     <div
-      className="rounded-full flex items-center justify-center text-white font-bold shrink-0 select-none"
-      style={{ ...GRADIENT_BRAND, width: size, height: size, fontSize: size * 0.34 }}
+      className="rounded-full flex items-center justify-center text-white font-bold shrink-0 select-none shadow-xs"
+      style={{
+        ...GRADIENT_BRAND,
+        width: size,
+        height: size,
+        fontSize: Math.max(10, Math.round(size * 0.36)),
+        letterSpacing: "-0.5px",
+      }}
     >
       TD
     </div>
   );
+
   if (!ring) return el;
+
+  const ringStyle = platform === "instagram" ? { background: IG_STORY_GRADIENT } : GRADIENT_BRAND;
+
   return (
-    <div className="rounded-full p-[2px]" style={GRADIENT_BRAND}>
-      <div className="rounded-full bg-white p-[2px]">{el}</div>
+    <div className="rounded-full p-[2px] transition-transform hover:scale-105" style={ringStyle}>
+      <div className="rounded-full bg-white dark:bg-black p-[2px]">{el}</div>
     </div>
+  );
+}
+
+function VerifiedBadge({ platform = "instagram" }: { platform?: SocialPlatform }) {
+  if (platform === "facebook") {
+    return (
+      <span
+        title="Verified Page"
+        className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#1877F2] text-white shadow-xs"
+      >
+        <Check className="size-[9px] stroke-[3]" />
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Verified Account"
+      className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#0095F6] text-white shadow-xs"
+    >
+      <Check className="size-[9px] stroke-[3]" />
+    </span>
   );
 }
 
 function formatCaption(caption: Caption): string {
   return [caption.headline, caption.primaryText, caption.hashtags, caption.cta]
     .filter(Boolean)
-    .join("\n");
+    .join("\n\n");
+}
+
+function renderFormattedCaption(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\s+)/);
+  return parts.map((part, i) => {
+    if (part.startsWith("#") && part.length > 1) {
+      return (
+        <span
+          key={i}
+          className="text-[#00376B] dark:text-[#3897f0] hover:underline cursor-pointer font-medium"
+        >
+          {part}
+        </span>
+      );
+    }
+    if (part.startsWith("@") && part.length > 1) {
+      return (
+        <span key={i} className="text-[#00376B] dark:text-[#3897f0] hover:underline cursor-pointer font-medium">
+          {part}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 // ============================================================
@@ -89,7 +162,7 @@ function Skeleton({ className, style }: { className?: string; style?: React.CSSP
       className={cn("animate-shimmer rounded-[4px]", className)}
       style={{
         background:
-          "linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)",
+          "linear-gradient(90deg, rgba(240,240,240,0.8) 25%, rgba(220,220,220,0.9) 50%, rgba(240,240,240,0.8) 75%)",
         backgroundSize: "200% 100%",
         ...style,
       }}
@@ -105,7 +178,7 @@ export function PreviewSkeleton({
   device: PreviewDevice;
 }) {
   const isMobile = device === "mobile";
-  const maxW = isMobile ? 360 : 520;
+  const maxW = isMobile ? 380 : 540;
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: maxW }}>
@@ -114,31 +187,24 @@ export function PreviewSkeleton({
         className={cn(
           "bg-white rounded-b-[8px] overflow-hidden",
           !isMobile && "border border-[#dbdbdb] shadow-sm",
-          isMobile && "rounded-[28px] overflow-hidden shadow-lg"
+          isMobile && "rounded-[38px] overflow-hidden shadow-xl border-[6px] border-[#1c1c1e]"
         )}
       >
-        {/* Header skeleton */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-black/5">
           <Skeleton className="size-10 rounded-full" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="h-2.5 w-20" />
           </div>
         </div>
-        {/* Media skeleton */}
-        <Skeleton
-          className="w-full"
-          style={{ aspectRatio: isMobile ? "9/16" : "1/1" }}
-        />
-        {/* Actions skeleton */}
+        <Skeleton className="w-full" style={{ aspectRatio: isMobile ? "9/16" : "1/1" }} />
         <div className="flex items-center gap-3 px-4 py-3">
           <Skeleton className="size-5 rounded-full" />
           <Skeleton className="size-5 rounded-full" />
           <Skeleton className="size-5 rounded-full" />
           <Skeleton className="size-5 rounded-full ml-auto" />
         </div>
-        {/* Caption skeleton */}
-        <div className="px-4 pb-3 space-y-2">
+        <div className="px-4 pb-4 space-y-2">
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-2/3" />
@@ -149,17 +215,37 @@ export function PreviewSkeleton({
 }
 
 // ============================================================
-// DEVICE SHELLS
+// ULTRA-REALISTIC DEVICE SHELLS
 // ============================================================
 
 function BrowserChrome({ platform }: { platform: SocialPlatform }) {
+  const url = platform === "facebook" ? "facebook.com/tallindoll" : "instagram.com/tallindoll";
+
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-t-[8px] bg-[#e9eaed] border border-b-0 border-[#d0d3d9]">
-      <span className="size-2.5 rounded-full bg-[#ff5f57]" />
-      <span className="size-2.5 rounded-full bg-[#febc2e]" />
-      <span className="size-2.5 rounded-full bg-[#28c840]" />
-      <div className="ml-2 flex-1 truncate rounded-[5px] bg-white px-2 py-0.5 text-[11px] text-[#65676b] font-sans">
-        {platform === "facebook" ? "facebook.com" : "instagram.com"}
+    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-t-[10px] bg-[#f1f3f5] dark:bg-[#1e1e24] border border-b-0 border-[#d0d3d9] dark:border-white/10 select-none shadow-xs">
+      {/* Traffic light window controls */}
+      <div className="flex items-center gap-2">
+        <span className="size-3 rounded-full bg-[#ff5f57] border border-[#e0443e] shadow-inner" />
+        <span className="size-3 rounded-full bg-[#febc2e] border border-[#d8a123] shadow-inner" />
+        <span className="size-3 rounded-full bg-[#28c840] border border-[#1aab29] shadow-inner" />
+      </div>
+
+      {/* Nav chevrons */}
+      <div className="hidden sm:flex items-center gap-1 text-[#65676b] dark:text-neutral-400">
+        <ChevronLeft className="size-3.5 opacity-60" />
+        <ChevronRight className="size-3.5 opacity-30" />
+        <RotateCw className="size-3 opacity-60 ml-1" />
+      </div>
+
+      {/* URL Pill */}
+      <div className="flex-1 max-w-[260px] mx-2 flex items-center justify-center gap-1.5 rounded-full bg-white dark:bg-[#121216] border border-black/10 dark:border-white/10 px-3 py-1 text-[11px] font-sans text-[#333] dark:text-neutral-200 shadow-2xs">
+        <Lock className="size-2.5 text-[#008a00] shrink-0" />
+        <span className="truncate font-normal tracking-tight">{url}</span>
+      </div>
+
+      {/* Platform badge */}
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#65676b] dark:text-neutral-400 px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
+        {platform}
       </div>
     </div>
   );
@@ -173,22 +259,55 @@ function PhoneFrame({
   platform?: SocialPlatform;
 }) {
   return (
-    <div className="mx-auto" style={{ width: 360 }}>
-      <div className="rounded-[40px] border-[10px] border-[#1c1c1e] bg-[#1c1c1e] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
-        <div className="relative bg-white">
-          {/* Notch */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[130px] h-[22px] bg-[#1c1c1e] rounded-b-[16px] z-10" />
-          {/* Status bar */}
-          <div className="flex items-center justify-between px-6 pt-1.5 pb-0 text-[11px] font-semibold text-black bg-white">
-            <span>9:41</span>
-            <span>📶 🔋</span>
+    <div className="mx-auto select-none" style={{ width: 375, maxWidth: "100%" }}>
+      {/* Outer titanium body */}
+      <div className="relative rounded-[48px] p-[9px] bg-gradient-to-b from-[#3a3b40] via-[#24252a] to-[#1a1a1e] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.12)]">
+        {/* Screen container */}
+        <div className="relative rounded-[39px] overflow-hidden bg-black text-white">
+          {/* Dynamic Island */}
+          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-40 flex items-center justify-between w-[112px] h-[28px] bg-black rounded-full px-2.5 shadow-md ring-1 ring-white/10 pointer-events-none">
+            {/* Front camera lens */}
+            <div className="size-3 rounded-full bg-[#111] ring-1 ring-white/20 flex items-center justify-center">
+              <span className="size-1 rounded-full bg-[#0d2a45]" />
+            </div>
+            {/* Sensor */}
+            <div className="size-2.5 rounded-full bg-[#0c0c0e]" />
           </div>
-          <div className="pt-2">{children}</div>
+
+          {/* iOS Status Bar */}
+          <div className="relative z-30 flex items-center justify-between px-7 pt-3 pb-1 text-[12px] font-semibold text-white tracking-tight pointer-events-none">
+            <span>9:41</span>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              {/* Signal bars */}
+              <div className="flex items-end gap-[1.5px] h-2.5">
+                <span className="w-[2.5px] h-1 bg-white rounded-xs" />
+                <span className="w-[2.5px] h-1.5 bg-white rounded-xs" />
+                <span className="w-[2.5px] h-2 bg-white rounded-xs" />
+                <span className="w-[2.5px] h-2.5 bg-white rounded-xs" />
+              </div>
+              <span className="text-[10px] font-bold">5G</span>
+              {/* Battery */}
+              <div className="relative w-5 h-2.5 rounded-[3px] border border-white p-[1px] flex items-center">
+                <div className="h-full w-3.5 bg-white rounded-[1.5px]" />
+                <div className="absolute -right-[3px] top-1/2 -translate-y-1/2 w-[1.5px] h-1 bg-white rounded-r-xs" />
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="relative bg-white text-[#262626] min-h-[580px]">{children}</div>
+
+          {/* Home indicator bar */}
+          <div className="absolute bottom-1.5 inset-x-0 z-40 flex justify-center pointer-events-none">
+            <div className="w-32 h-[4px] rounded-full bg-neutral-400/80 dark:bg-white/70 shadow-xs" />
+          </div>
         </div>
       </div>
-      <p className="text-center text-[11px] text-[var(--body-subtle)] mt-2 uppercase tracking-wider">
-        Mobile
-      </p>
+
+      <div className="flex items-center justify-center gap-1.5 text-center text-[11px] text-[var(--body-subtle)] mt-3">
+        <span className="size-1.5 rounded-full bg-[var(--brand)]" />
+        <span className="uppercase tracking-wider font-semibold">Mobile Device Preview (iOS)</span>
+      </div>
     </div>
   );
 }
@@ -204,12 +323,16 @@ function DesktopShell({
     <div className="mx-auto w-full max-w-[540px]">
       <BrowserChrome platform={platform} />
       <div
+        className="rounded-b-[10px] overflow-hidden border border-[#d0d3d9] dark:border-white/10 shadow-lg"
         style={{
           backgroundColor: platform === "facebook" ? "#f0f2f5" : "#fafafa",
         }}
       >
         {children}
       </div>
+      <p className="text-center text-[11px] text-[var(--body-subtle)] mt-3 uppercase tracking-wider font-semibold">
+        Desktop Browser View
+      </p>
     </div>
   );
 }
@@ -261,7 +384,7 @@ function CarouselWrapper({
   const handleTouchEnd = (e: React.TouchEvent) => {
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 35) {
       if (dx > 0 && activeIdx > 0) {
         setSwipeDir("right");
         setSwiping(true);
@@ -269,7 +392,7 @@ function CarouselWrapper({
           onPrev();
           setSwiping(false);
           setSwipeDir(null);
-        }, 200);
+        }, 180);
       } else if (dx < 0 && activeIdx < total - 1) {
         setSwipeDir("left");
         setSwiping(true);
@@ -277,59 +400,68 @@ function CarouselWrapper({
           onNext();
           setSwiping(false);
           setSwipeDir(null);
-        }, 200);
+        }, 180);
       }
     }
   };
 
   return (
     <div
-      className={cn("relative overflow-hidden", className)}
+      className={cn("relative overflow-hidden group select-none", className)}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Slide content */}
+      {/* Slide counter badge */}
+      {total > 1 && (
+        <div className="absolute top-3 right-3 z-20 px-2.5 py-1 rounded-full bg-black/65 backdrop-blur-md text-white text-[11px] font-semibold tracking-wider shadow-sm">
+          {activeIdx + 1}/{total}
+        </div>
+      )}
+
+      {/* Slide Content */}
       <div
         className={cn(
-          "transition-transform duration-200 ease-out",
-          swiping && swipeDir === "left" && "-translate-x-[10%] opacity-70",
-          swiping && swipeDir === "right" && "translate-x-[10%] opacity-70"
+          "transition-transform duration-300 ease-out",
+          swiping && swipeDir === "left" && "-translate-x-[6%] opacity-80",
+          swiping && swipeDir === "right" && "translate-x-[6%] opacity-80"
         )}
       >
         {children}
       </div>
 
-      {/* Prev button */}
+      {/* Prev arrow */}
       {total > 1 && activeIdx > 0 && (
         <button
           onClick={onPrev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors z-10"
+          aria-label="Previous slide"
+          className="absolute left-3 top-1/2 -translate-y-1/2 size-8 rounded-full bg-white/90 dark:bg-black/80 shadow-md flex items-center justify-center hover:bg-white hover:scale-110 active:scale-95 transition-all z-20"
         >
-          <ChevronLeft className="size-4 text-[#262626]" />
+          <ChevronLeft className="size-4 text-[#262626] dark:text-white" />
         </button>
       )}
 
-      {/* Next button */}
+      {/* Next arrow */}
       {total > 1 && activeIdx < total - 1 && (
         <button
           onClick={onNext}
-          className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors z-10"
+          aria-label="Next slide"
+          className="absolute right-3 top-1/2 -translate-y-1/2 size-8 rounded-full bg-white/90 dark:bg-black/80 shadow-md flex items-center justify-center hover:bg-white hover:scale-110 active:scale-95 transition-all z-20"
         >
-          <ChevronRight className="size-4 text-[#262626]" />
+          <ChevronRight className="size-4 text-[#262626] dark:text-white" />
         </button>
       )}
 
       {/* Pagination dots */}
       {total > 1 && (
-        <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-10 pointer-events-none">
+        <div className="absolute bottom-3 inset-x-0 flex justify-center items-center gap-1.5 z-20 pointer-events-none">
           {Array.from({ length: total }).map((_, i) => (
             <div
               key={i}
               className={cn(
-                "size-1.5 rounded-full transition-all duration-200",
+                "rounded-full transition-all duration-200",
                 i === activeIdx
-                  ? "bg-[#0095f6] scale-125 shadow-sm"
-                  : "bg-white/70"
+                  ? "w-2.5 h-1.5 bg-[#0095f6] shadow-sm"
+                  : "size-1.5 bg-white/70 shadow-xs"
               )}
             />
           ))}
@@ -340,7 +472,7 @@ function CarouselWrapper({
 }
 
 // ============================================================
-// FACEBOOK FEED POST (Image & Video)
+// FACEBOOK FEED POST (Image, Video & Carousel)
 // ============================================================
 
 function FacebookFeedPost({
@@ -373,164 +505,122 @@ function FacebookFeedPost({
   isAudioPlaying?: boolean;
 }) {
   const body = formatCaption(caption);
-  const edgeToEdge = device === "mobile";
   const totalSlides = carouselSlides?.length ?? 1;
   const active = carouselSlides && carouselIdx !== undefined ? carouselSlides[carouselIdx] : null;
   const displaySrc = active?.formatted ?? imageSrc;
   const displayIsVideo = active?.isVideo ?? isVideo;
   const displayVideoSrc = active?.videoBlobUrl ?? videoSrc;
+
   const [videoMuted, setVideoMuted] = useState(true);
+  const [liked, setLiked] = useState(false);
+  const [showReactions, setShowReactions] = useState(false);
+  const [activeReaction, setActiveReaction] = useState<"like" | "love" | "care" | "haha">("like");
+  const [expandedCaption, setExpandedCaption] = useState(false);
+
+  const reactions = [
+    { type: "like", emoji: "👍", label: "Like", color: "text-[#1877F2]" },
+    { type: "love", emoji: "❤️", label: "Love", color: "text-[#FA3E3E]" },
+    { type: "care", emoji: "🥰", label: "Care", color: "text-[#F7B125]" },
+    { type: "haha", emoji: "😆", label: "Haha", color: "text-[#F7B125]" },
+  ];
 
   return (
     <Shell platform="facebook" device={device}>
-      <div
-        className={cn(
-          "bg-white text-[#050505] font-sans",
-          edgeToEdge
-            ? ""
-            : "rounded-b-[8px] shadow-[0_1px_2px_rgba(0,0,0,0.2)] border border-[#ced0d4]"
-        )}
-      >
+      <div className="bg-white text-[#050505] font-sans antialiased text-left select-none">
         {/* ── Header ── */}
-        <div
-          className={cn(
-            "flex items-center gap-2.5",
-            edgeToEdge ? "px-3 pt-3 pb-2" : "px-4 pt-3 pb-2"
-          )}
-        >
-          <Avatar size={edgeToEdge ? 36 : 40} />
+        <div className="flex items-center gap-3 px-4 pt-3.5 pb-2.5">
+          <Avatar size={40} platform="facebook" />
           <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-semibold leading-tight flex items-center gap-1 text-[#050505]">
-              {BRAND_NAME}
-              <span className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#1877f2] text-white text-[8px]">
-                ✓
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[15px] font-bold text-[#050505] leading-tight hover:underline cursor-pointer">
+                {BRAND_NAME}
               </span>
-            </p>
-            <div className="flex items-center gap-1 text-[12px] text-[#65676b]">
+              <VerifiedBadge platform="facebook" />
+            </div>
+            <div className="flex items-center gap-1 text-[12px] text-[#65676b] font-normal leading-tight mt-0.5">
               {sponsored ? <span>Sponsored</span> : <span>Just now</span>}
               <span>·</span>
-              <Globe className="size-3 text-[#65676b]" />
+              <Globe className="size-3 text-[#65676b]" aria-label="Shared with Public" />
             </div>
+
             {audioName && (
-              <div className="flex items-center gap-2 mt-0.5">
-                <Music2 className="size-3.5 text-[#65676b] shrink-0" />
-                <span className="text-[12px] text-[#65676b] font-medium truncate">{audioName}</span>
+              <div className="flex items-center gap-2 mt-1 px-2 py-0.5 rounded-full bg-[#f0f2f5] w-fit">
+                <Music2 className="size-3 text-[#1877f2] shrink-0" />
+                <span className="text-[11px] text-[#050505] font-medium truncate max-w-[200px]">
+                  {audioName}
+                </span>
                 {onAudioPlay && (
-                  <button onClick={onAudioPlay} className="shrink-0 size-5 rounded-full bg-[#e4e6eb] flex items-center justify-center hover:bg-[#d8d9dc] transition-colors">
-                    {isAudioPlaying ? <Pause className="size-2.5 text-[#050505]" /> : <Play className="size-2.5 text-[#050505] ml-[1px]" />}
+                  <button
+                    onClick={onAudioPlay}
+                    className="size-4 rounded-full bg-[#1877f2] text-white flex items-center justify-center hover:opacity-90"
+                  >
+                    {isAudioPlaying ? <Pause className="size-2 fill-white" /> : <Play className="size-2 fill-white ml-[1px]" />}
                   </button>
                 )}
               </div>
             )}
           </div>
-          <MoreHorizontal className="size-5 text-[#65676b] cursor-pointer" />
+
+          <div className="flex items-center text-[#65676b]">
+            <button className="p-1.5 rounded-full hover:bg-[#f0f2f5] transition-colors">
+              <MoreHorizontal className="size-5" />
+            </button>
+          </div>
         </div>
 
         {/* ── Caption text ── */}
         {body && (
-          <p
-            className={cn(
-              "text-[15px] leading-snug whitespace-pre-line text-[#050505]",
-              edgeToEdge ? "px-3 pb-2" : "px-4 pb-2"
-            )}
-          >
-            {body}
-          </p>
+          <div className="px-4 pb-3">
+            <p className="text-[15px] leading-snug text-[#050505] whitespace-pre-line break-words">
+              {body.length > 240 && !expandedCaption ? (
+                <>
+                  {renderFormattedCaption(body.slice(0, 240))}…{" "}
+                  <button
+                    onClick={() => setExpandedCaption(true)}
+                    className="font-semibold text-[#65676b] hover:underline"
+                  >
+                    See more
+                  </button>
+                </>
+              ) : (
+                renderFormattedCaption(body)
+              )}
+            </p>
+          </div>
         )}
 
-        {/* ── Media ── */}
+        {/* ── Media Surface ── */}
         {totalSlides > 1 && carouselSlides ? (
-          /* Facebook carousel — horizontal slide with peek, arrows on edges, dots below */
-          <div className="relative select-none">
-            {/* Slide track */}
-            <div className="relative overflow-hidden bg-[#e4e6eb]">
-              <div
-                className="flex transition-transform duration-300 ease-out"
-                style={{
-                  transform: `translateX(-${(carouselIdx ?? 0) * 100}%)`,
-                }}
-              >
-                {carouselSlides.map((slide, i) => {
-                  const src = slide.formatted;
-                  const vid = slide.isVideo && slide.videoBlobUrl;
-                  return (
-                    <div
-                      key={i}
-                      className="w-full shrink-0 flex items-center justify-center bg-[#e4e6eb]"
-                      style={{ aspectRatio: "1/1" }}
-                    >
-                      {vid ? (
-                        <video
-                          src={slide.videoBlobUrl!}
-                          poster={src ?? undefined}
-                          className="w-full h-full object-cover"
-                          autoPlay
-                          muted
-                          loop
-                          playsInline
-                        />
-                      ) : src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt={`Slide ${i + 1}`}
-                          className="w-full h-full object-contain"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1.5 text-[#8a8d91]">
-                          <ImageIcon className="size-8" />
-                          <span className="text-[12px]">Slide {i + 1}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Left arrow */}
-              {(carouselIdx ?? 0) > 0 && (
-                <button
-                  onClick={onCarouselPrev}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] flex items-center justify-center hover:bg-[#f0f2f5] transition-colors z-10"
-                >
-                  <ChevronLeft className="size-5 text-[#1c1e21]" />
-                </button>
-              )}
-
-              {/* Right arrow */}
-              {(carouselIdx ?? 0) < totalSlides - 1 && (
-                <button
-                  onClick={onCarouselNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 size-9 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] flex items-center justify-center hover:bg-[#f0f2f5] transition-colors z-10"
-                >
-                  <ChevronRight className="size-5 text-[#1c1e21]" />
-                </button>
-              )}
-            </div>
-
-            {/* Pagination dots — below the image, Facebook style */}
-            <div className="flex items-center justify-center gap-1.5 py-2">
-              {carouselSlides.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    if (i < (carouselIdx ?? 0)) onCarouselPrev?.();
-                    else if (i > (carouselIdx ?? 0)) onCarouselNext?.();
-                  }}
-                  className={cn(
-                    "size-[7px] rounded-full transition-all duration-200",
-                    i === (carouselIdx ?? 0)
-                      ? "bg-[#1877f2] scale-100"
-                      : "bg-[#bec3c9] hover:bg-[#8a8d91]"
-                  )}
+          <CarouselWrapper
+            total={totalSlides}
+            activeIdx={carouselIdx ?? 0}
+            onPrev={onCarouselPrev ?? (() => {})}
+            onNext={onCarouselNext ?? (() => {})}
+          >
+            <div className="w-full bg-[#f0f2f5] flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
+              {displayIsVideo && displayVideoSrc ? (
+                <video
+                  src={displayVideoSrc}
+                  poster={displaySrc ?? undefined}
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  muted={videoMuted}
+                  loop
+                  playsInline
                 />
-              ))}
+              ) : displaySrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={displaySrc} alt="Post media" className="w-full h-full object-cover" draggable={false} />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-[#65676b]">
+                  <ImageIcon className="size-10 stroke-[1.5]" />
+                  <span className="text-[13px] font-medium">Slide { (carouselIdx ?? 0) + 1 }</span>
+                </div>
+              )}
             </div>
-          </div>
+          </CarouselWrapper>
         ) : displayIsVideo && displayVideoSrc ? (
-          /* Single video */
-          <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: "1/1" }}>
+          <div className="relative w-full bg-black flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
             <video
               src={displayVideoSrc}
               poster={displaySrc ?? undefined}
@@ -542,94 +632,113 @@ function FacebookFeedPost({
             />
             <button
               onClick={() => setVideoMuted(!videoMuted)}
-              className="absolute bottom-3 right-3 size-9 rounded-full bg-black/50 backdrop-blur flex items-center justify-center"
+              aria-label="Toggle mute"
+              className="absolute bottom-3 right-3 size-8 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/80 transition-transform active:scale-90"
             >
-              {videoMuted ? (
-                <VolumeX className="size-4 text-white" />
-              ) : (
-                <Volume2 className="size-4 text-white" />
-              )}
+              {videoMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
             </button>
           </div>
         ) : (
-          /* Single image */
-          <div
-            className="w-full overflow-hidden flex items-center justify-center bg-[#e4e6eb]"
-            style={{ aspectRatio: "1/1" }}
-          >
+          <div className="w-full bg-[#e4e6eb] flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
             {displaySrc ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={displaySrc}
-                alt="Post"
-                className="w-full h-full object-contain"
-              />
+              <img src={displaySrc} alt="Post media" className="w-full h-full object-cover" draggable={false} />
             ) : (
-              <div className="flex flex-col items-center gap-1.5 text-[#8a8d91]">
-                <ImageIcon className="size-8" />
-                <span className="text-[12px]">Upload an image to preview</span>
+              <div className="flex flex-col items-center gap-2 text-[#65676b] py-16">
+                <div className="size-12 rounded-full bg-black/5 flex items-center justify-center">
+                  <ImageIcon className="size-6 text-[#65676b]" />
+                </div>
+                <span className="text-[13px] font-medium">Upload an image to preview</span>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Reaction summary ── */}
-        <div
-          className={cn(
-            "flex items-center justify-between text-[13px] text-[#65676b]",
-            edgeToEdge ? "px-3 py-1.5" : "px-4 py-1.5"
-          )}
-        >
-          <div className="flex items-center gap-1">
-            <span className="flex -space-x-1">
-              <span className="size-[18px] rounded-full bg-[#1877f2] flex items-center justify-center text-white text-[9px]">
+        {/* ── Reaction Summary Bar ── */}
+        <div className="flex items-center justify-between px-4 py-2 text-[13px] text-[#65676b] border-b border-[#ced0d4]/60 mx-1">
+          <div className="flex items-center gap-1.5 cursor-pointer hover:underline">
+            <span className="flex -space-x-1.5 items-center">
+              <span className="size-[20px] rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] ring-2 ring-white shadow-xs">
                 👍
               </span>
-              <span className="size-[18px] rounded-full bg-[#f33e58] flex items-center justify-center text-white text-[9px]">
+              <span className="size-[20px] rounded-full bg-[#FA3E3E] flex items-center justify-center text-white text-[10px] ring-2 ring-white shadow-xs">
                 ❤️
               </span>
-              <span className="size-[18px] rounded-full bg-[#f7b125] flex items-center justify-center text-white text-[9px]">
-                😆
+              <span className="size-[20px] rounded-full bg-[#F7B125] flex items-center justify-center text-white text-[10px] ring-2 ring-white shadow-xs">
+                🥰
               </span>
             </span>
-            <span className="ml-1 hover:underline cursor-pointer">1.2K</span>
+            <span className="font-medium ml-1 text-[#65676b]">{liked ? "1,249" : "1,248"}</span>
           </div>
-          <div className="flex items-center gap-1 text-[13px]">
+
+          <div className="flex items-center gap-2.5 text-[13px] font-medium">
             <span className="hover:underline cursor-pointer">84 comments</span>
             <span>·</span>
-            <span className="hover:underline cursor-pointer">12 shares</span>
+            <span className="hover:underline cursor-pointer">18 shares</span>
           </div>
         </div>
 
-        {/* ── Action bar ── */}
-        <div
-          className={cn(
-            "flex items-center justify-around border-t border-[#ced0d4] mx-3",
-            edgeToEdge ? "py-0.5" : "py-1"
+        {/* ── Action Toolbar with Reaction Drawer ── */}
+        <div className="relative px-2 py-1 flex items-center justify-around border-b border-[#ced0d4]/60 mx-1">
+          {/* Reaction popover on hover/focus */}
+          {showReactions && (
+            <div
+              onMouseEnter={() => setShowReactions(true)}
+              onMouseLeave={() => setShowReactions(false)}
+              className="absolute -top-11 left-4 z-30 flex items-center gap-2 bg-white rounded-full px-3 py-1.5 shadow-xl border border-black/10 animate-fade-in"
+            >
+              {reactions.map((r) => (
+                <button
+                  key={r.type}
+                  onClick={() => {
+                    setActiveReaction(r.type as any);
+                    setLiked(true);
+                    setShowReactions(false);
+                  }}
+                  className="size-7 rounded-full flex items-center justify-center text-lg hover:scale-130 transition-transform active:scale-95"
+                  title={r.label}
+                >
+                  {r.emoji}
+                </button>
+              ))}
+            </div>
           )}
-        >
-          <span className="flex items-center gap-2 py-1.5 px-6 text-[14px] font-semibold text-[#65676b] hover:bg-[#f0f2f5] rounded-[4px] cursor-pointer transition-colors">
-            <ThumbsUp className="size-[18px] text-[#1877f2]" /> Like
-          </span>
-          <span className="flex items-center gap-2 py-1.5 px-6 text-[14px] font-semibold text-[#65676b] hover:bg-[#f0f2f5] rounded-[4px] cursor-pointer transition-colors">
-            <MessageCircle className="size-[18px]" /> Comment
-          </span>
-          <span className="flex items-center gap-2 py-1.5 px-6 text-[14px] font-semibold text-[#65676b] hover:bg-[#f0f2f5] rounded-[4px] cursor-pointer transition-colors">
-            <Share2 className="size-[18px]" /> Share
-          </span>
+
+          {/* Like Button */}
+          <button
+            onClick={() => setLiked(!liked)}
+            onMouseEnter={() => setShowReactions(true)}
+            className={cn(
+              "flex items-center justify-center gap-2 flex-1 py-2 text-[14px] font-semibold rounded-[4px] hover:bg-[#f0f2f5] transition-colors",
+              liked ? "text-[#1877F2]" : "text-[#65676b]"
+            )}
+          >
+            <ThumbsUp className={cn("size-4", liked && "fill-[#1877F2]")} />
+            <span>{liked ? (activeReaction === "love" ? "Love" : "Liked") : "Like"}</span>
+          </button>
+
+          {/* Comment Button */}
+          <button className="flex items-center justify-center gap-2 flex-1 py-2 text-[14px] font-semibold text-[#65676b] rounded-[4px] hover:bg-[#f0f2f5] transition-colors">
+            <MessageCircle className="size-4" />
+            <span>Comment</span>
+          </button>
+
+          {/* Share Button */}
+          <button className="flex items-center justify-center gap-2 flex-1 py-2 text-[14px] font-semibold text-[#65676b] rounded-[4px] hover:bg-[#f0f2f5] transition-colors">
+            <Share2 className="size-4" />
+            <span>Share</span>
+          </button>
         </div>
 
-        {/* ── Comment box ── */}
-        <div
-          className={cn(
-            "flex items-center gap-2 border-t border-[#ced0d4]",
-            edgeToEdge ? "px-3 py-2" : "px-4 py-2"
-          )}
-        >
-          <Avatar size={28} />
-          <div className="flex-1 flex items-center gap-2 rounded-full px-3 py-1.5 bg-[#f0f2f5]">
-            <span className="text-[13px] text-[#8a8d91]">Write a comment…</span>
-            <Smile className="size-4 text-[#8a8d91] ml-auto" />
+        {/* ── Comment Input Box ── */}
+        <div className="flex items-center gap-2.5 px-4 py-3">
+          <Avatar size={32} platform="facebook" />
+          <div className="flex-1 flex items-center gap-2 rounded-full px-3 py-1.5 bg-[#f0f2f5] border border-transparent focus-within:border-[#1877f2] transition-colors">
+            <span className="text-[13px] text-[#65676b] flex-1">Write a comment…</span>
+            <div className="flex items-center gap-1 text-[#65676b]">
+              <Smile className="size-4 hover:text-[#050505] cursor-pointer" />
+              <Camera className="size-4 hover:text-[#050505] cursor-pointer" />
+            </div>
           </div>
         </div>
       </div>
@@ -670,242 +779,231 @@ function InstagramFeedPost({
   onAudioPlay?: () => void;
   isAudioPlaying?: boolean;
 }) {
-  const captionText = [caption.primaryText, caption.hashtags]
-    .filter(Boolean)
-    .join(" ");
-  const edgeToEdge = device === "mobile";
+  const captionText = [caption.primaryText, caption.hashtags].filter(Boolean).join(" ");
   const totalSlides = carouselSlides?.length ?? 1;
   const active = carouselSlides && carouselIdx !== undefined ? carouselSlides[carouselIdx] : null;
   const displaySrc = active?.formatted ?? imageSrc;
   const displayIsVideo = active?.isVideo ?? isVideo;
   const displayVideoSrc = active?.videoBlobUrl ?? videoSrc;
+
   const [videoMuted, setVideoMuted] = useState(true);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showHeartPop, setShowHeartPop] = useState(false);
+  const [expandedCaption, setExpandedCaption] = useState(false);
+
+  // Double tap to like on photo
+  const handlePhotoDoubleTap = () => {
+    setLiked(true);
+    setShowHeartPop(true);
+    setTimeout(() => setShowHeartPop(false), 800);
+  };
 
   return (
     <Shell platform="instagram" device={device}>
-      <div
-        className={cn(
-          "bg-white text-[#262626] font-sans",
-          edgeToEdge
-            ? "border-x border-[#dbdbdb]"
-            : "rounded-b-[3px] border border-[#dbdbdb]"
-        )}
-      >
+      <div className="bg-white text-[#262626] font-sans antialiased text-left select-none">
         {/* ── Header ── */}
-        <div
-          className={cn(
-            "flex items-center gap-2.5",
-            edgeToEdge ? "px-3 py-2.5" : "px-4 py-3"
-          )}
-        >
-          <Avatar size={edgeToEdge ? 28 : 32} ring />
-          <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-semibold leading-tight text-[#262626]">
-              {BRAND_HANDLE}
-            </p>
-            {sponsored && (
-              <p className="text-[11px] text-[#8e8e8e]">Sponsored</p>
-            )}
-            {audioName && (
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[12px] text-[#262626] font-medium truncate">
-                  ♪ {audioName}
+        <div className="flex items-center justify-between px-3.5 py-3 border-b border-[#efefef]">
+          <div className="flex items-center gap-3">
+            <Avatar size={34} ring platform="instagram" />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1">
+                <span className="text-[14px] font-bold text-[#262626] leading-none hover:underline cursor-pointer">
+                  {BRAND_HANDLE}
                 </span>
+                <VerifiedBadge platform="instagram" />
+              </div>
+              {sponsored ? (
+                <span className="text-[11px] text-[#8e8e8e] leading-tight">Sponsored</span>
+              ) : (
+                <span className="text-[11px] text-[#8e8e8e] leading-tight">Tallinn, Estonia</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {audioName && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#fafafa] border border-[#efefef] text-[11px]">
+                <Music2 className="size-3 text-[#262626]" />
+                <span className="truncate max-w-[120px] font-medium">{audioName}</span>
                 {onAudioPlay && (
-                  <button
-                    onClick={onAudioPlay}
-                    className="shrink-0 size-5 rounded-full bg-[#f0f0f0] flex items-center justify-center hover:bg-[#e0e0e0] transition-colors"
-                  >
-                    {isAudioPlaying ? (
-                      <Pause className="size-2.5 text-[#262626]" />
-                    ) : (
-                      <Play className="size-2.5 text-[#262626] ml-[1px]" />
-                    )}
+                  <button onClick={onAudioPlay} className="size-4 rounded-full bg-black/10 flex items-center justify-center">
+                    {isAudioPlaying ? <Pause className="size-2 fill-black" /> : <Play className="size-2 fill-black ml-[1px]" />}
                   </button>
                 )}
               </div>
             )}
+            <button className="p-1 text-[#262626] hover:opacity-70 transition-opacity">
+              <MoreHorizontal className="size-5" />
+            </button>
           </div>
-          <MoreHorizontal className="size-5 text-[#262626] cursor-pointer" />
         </div>
 
-        {/* ── Media ── */}
-        {totalSlides > 1 && carouselSlides ? (
-          <CarouselWrapper
-            total={totalSlides}
-            activeIdx={carouselIdx ?? 0}
-            onPrev={onCarouselPrev ?? (() => {})}
-            onNext={onCarouselNext ?? (() => {})}
-          >
-            <div
-              className={cn(
-                "w-full flex items-center justify-center",
-                displayIsVideo ? "bg-black" : "bg-[#fafafa]",
-                edgeToEdge ? "" : "border-y border-[#efefef]"
-              )}
-              style={{ aspectRatio: "1/1" }}
+        {/* ── Media Surface ── */}
+        <div className="relative overflow-hidden" onDoubleClick={handlePhotoDoubleTap}>
+          {/* Double-tap animated heart */}
+          {showHeartPop && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none animate-bounce">
+              <Heart className="size-24 text-white fill-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]" />
+            </div>
+          )}
+
+          {totalSlides > 1 && carouselSlides ? (
+            <CarouselWrapper
+              total={totalSlides}
+              activeIdx={carouselIdx ?? 0}
+              onPrev={onCarouselPrev ?? (() => {})}
+              onNext={onCarouselNext ?? (() => {})}
             >
-              {displaySrc ? (
-                displayIsVideo && displayVideoSrc ? (
+              <div className="w-full bg-[#fafafa] flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
+                {displayIsVideo && displayVideoSrc ? (
                   <video
                     src={displayVideoSrc}
-                    poster={displaySrc}
-                    className="w-full h-full object-contain"
+                    poster={displaySrc ?? undefined}
+                    className="w-full h-full object-cover"
                     autoPlay
                     muted={videoMuted}
                     loop
                     playsInline
                   />
-                ) : (
+                ) : displaySrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={displaySrc}
-                    alt="Post"
-                    className="w-full h-full object-contain"
-                  />
-                )
+                  <img src={displaySrc} alt="Instagram post" className="w-full h-full object-cover" draggable={false} />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-[#8e8e8e]">
+                    <ImageIcon className="size-10 stroke-[1.5]" />
+                    <span className="text-[12px]">Slide { (carouselIdx ?? 0) + 1 }</span>
+                  </div>
+                )}
+              </div>
+            </CarouselWrapper>
+          ) : displayIsVideo && displayVideoSrc ? (
+            <div className="relative w-full bg-black flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
+              <video
+                src={displayVideoSrc}
+                poster={displaySrc ?? undefined}
+                className="w-full h-full object-contain"
+                autoPlay
+                muted={videoMuted}
+                loop
+                playsInline
+              />
+              <button
+                onClick={() => setVideoMuted(!videoMuted)}
+                className="absolute bottom-3 right-3 size-8 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/80 transition-transform active:scale-90"
+              >
+                {videoMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+              </button>
+            </div>
+          ) : (
+            <div className="w-full bg-[#fafafa] flex items-center justify-center overflow-hidden" style={{ aspectRatio: "1/1" }}>
+              {displaySrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={displaySrc} alt="Instagram post" className="w-full h-full object-cover" draggable={false} />
               ) : (
-                <div className="flex flex-col items-center gap-2 text-[#8e8e8e]">
-                  <ImageIcon className="size-8" />
-                  <span className="text-[12px]">Upload images</span>
+                <div className="flex flex-col items-center gap-2 text-[#8e8e8e] py-16">
+                  <div className="size-12 rounded-full bg-black/5 flex items-center justify-center">
+                    <ImageIcon className="size-6 text-[#8e8e8e]" />
+                  </div>
+                  <span className="text-[12px] font-medium">Upload photo to preview</span>
                 </div>
               )}
             </div>
-          </CarouselWrapper>
-        ) : (
-          <div
-            className={cn(
-              "w-full flex items-center justify-center",
-              displayIsVideo ? "bg-black" : "bg-[#fafafa]",
-              edgeToEdge ? "" : "border-y border-[#efefef]"
-            )}
-            style={{ aspectRatio: "1/1" }}
-          >
-            {displayIsVideo && displayVideoSrc ? (
-              <div className="relative w-full h-full">
-                <video
-                  src={displayVideoSrc}
-                  poster={displaySrc ?? undefined}
-                  className="w-full h-full object-contain"
-                  autoPlay
-                  muted={videoMuted}
-                  loop
-                  playsInline
-                />
-                <button
-                  onClick={() => setVideoMuted(!videoMuted)}
-                  className="absolute bottom-3 right-3 size-8 rounded-full bg-black/50 backdrop-blur flex items-center justify-center"
-                >
-                  {videoMuted ? (
-                    <VolumeX className="size-3.5 text-white" />
-                  ) : (
-                    <Volume2 className="size-3.5 text-white" />
-                  )}
-                </button>
-              </div>
-            ) : displaySrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={displaySrc}
-                alt="Post"
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-[#8e8e8e]">
-                <ImageIcon className="size-8" />
-                <span className="text-[12px]">Upload an image</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Action row ── */}
-        <div
-          className={cn(
-            "flex items-center gap-4",
-            edgeToEdge ? "px-3 pt-3" : "px-4 pt-3"
           )}
-        >
-          <button onClick={() => setLiked(!liked)} className="transition-transform active:scale-125">
-            <Heart
-              className={cn(
-                "size-6 transition-colors",
-                liked ? "fill-[#ed4956] text-[#ed4956]" : "text-[#262626] hover:text-[#8e8e8e]"
-              )}
-            />
-          </button>
-          <MessageCircle className="size-6 text-[#262626] hover:text-[#8e8e8e] cursor-pointer" />
-          <Send className="size-6 text-[#262626] hover:text-[#8e8e8e] cursor-pointer" />
-          <button onClick={() => setSaved(!saved)} className="ml-auto transition-transform active:scale-125">
+        </div>
+
+        {/* ── Action Toolbar ── */}
+        <div className="flex items-center justify-between px-3.5 pt-3 pb-1">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                setLiked(!liked);
+                if (!liked) {
+                  setShowHeartPop(true);
+                  setTimeout(() => setShowHeartPop(false), 800);
+                }
+              }}
+              aria-label="Like post"
+              className="transition-transform active:scale-125"
+            >
+              <Heart
+                className={cn(
+                  "size-6 transition-colors",
+                  liked ? "fill-[#ed4956] text-[#ed4956]" : "text-[#262626] hover:opacity-60"
+                )}
+              />
+            </button>
+            <button aria-label="Comment" className="transition-transform active:scale-110">
+              <MessageCircle className="size-6 text-[#262626] hover:opacity-60" />
+            </button>
+            <button aria-label="Share" className="transition-transform active:scale-110">
+              <Send className="size-6 text-[#262626] hover:opacity-60" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setSaved(!saved)}
+            aria-label="Save post"
+            className="transition-transform active:scale-125"
+          >
             <Bookmark
               className={cn(
                 "size-6 transition-colors",
-                saved ? "fill-[#262626] text-[#262626]" : "text-[#262626] hover:text-[#8e8e8e]"
+                saved ? "fill-[#262626] text-[#262626]" : "text-[#262626] hover:opacity-60"
               )}
             />
           </button>
         </div>
 
-        {/* ── Likes ── */}
-        <p
-          className={cn(
-            "text-[14px] font-semibold text-[#262626]",
-            edgeToEdge ? "px-3 pt-2" : "px-4 pt-2"
-          )}
-        >
-          {liked ? "1,249" : "1,248"} likes
-        </p>
-
-        {/* ── Caption ── */}
-        {captionText && (
-          <p
-            className={cn(
-              "text-[14px] leading-snug text-[#262626]",
-              edgeToEdge ? "px-3 pt-1 pb-1" : "px-4 pt-1 pb-1"
-            )}
-          >
-            <span className="font-semibold mr-1.5">{BRAND_HANDLE}</span>
-            <span className="whitespace-pre-line">{captionText}</span>
+        {/* ── Likes counter with stacked micro-avatars ── */}
+        <div className="flex items-center gap-2 px-3.5 pt-1.5">
+          <div className="flex -space-x-1.5 overflow-hidden">
+            <span className="inline-block size-4 rounded-full bg-purple-500 ring-1 ring-white" />
+            <span className="inline-block size-4 rounded-full bg-pink-500 ring-1 ring-white" />
+            <span className="inline-block size-4 rounded-full bg-amber-500 ring-1 ring-white" />
+          </div>
+          <p className="text-[13px] text-[#262626]">
+            Liked by <span className="font-semibold">nordic_fashion</span> and{" "}
+            <span className="font-semibold">{liked ? "1,249 others" : "1,248 others"}</span>
           </p>
-        )}
-
-        {/* ── View comments ── */}
-        <p
-          className={cn(
-            "text-[14px] text-[#8e8e8e] cursor-pointer",
-            edgeToEdge ? "px-3 pt-1" : "px-4 pt-1"
-          )}
-        >
-          View all 84 comments
-        </p>
-
-        {/* ── Comment input ── */}
-        <div
-          className={cn(
-            "flex items-center gap-2 border-t border-[#efefef]",
-            edgeToEdge ? "px-3 py-2.5 mt-2" : "px-4 py-3 mt-2"
-          )}
-        >
-          <Avatar size={26} />
-          <span className="text-[14px] text-[#8e8e8e] flex-1 cursor-text">
-            Add a comment…
-          </span>
-          <span className="text-[14px] font-semibold text-[#b2dffc] cursor-pointer">
-            Post
-          </span>
         </div>
 
-        {/* ── Timestamp ── */}
-        <p
-          className={cn(
-            "text-[10px] uppercase text-[#8e8e8e] tracking-[0.5px]",
-            edgeToEdge ? "px-3 pb-3 pt-2" : "px-4 pb-3 pt-2"
-          )}
-        >
-          2 hours ago
-        </p>
+        {/* ── Caption text ── */}
+        {captionText && (
+          <div className="px-3.5 pt-1.5">
+            <p className="text-[14px] leading-snug text-[#262626] break-words">
+              <span className="font-bold mr-1.5 hover:underline cursor-pointer">{BRAND_HANDLE}</span>
+              {captionText.length > 120 && !expandedCaption ? (
+                <>
+                  {renderFormattedCaption(captionText.slice(0, 120))}…{" "}
+                  <button
+                    onClick={() => setExpandedCaption(true)}
+                    className="text-[#8e8e8e] font-normal hover:underline"
+                  >
+                    more
+                  </button>
+                </>
+              ) : (
+                renderFormattedCaption(captionText)
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* ── Comments teaser & Timestamp ── */}
+        <div className="px-3.5 pt-1 space-y-1">
+          <p className="text-[13px] text-[#8e8e8e] cursor-pointer hover:underline">View all 84 comments</p>
+          <p className="text-[10px] uppercase text-[#8e8e8e] tracking-wider">2 HOURS AGO</p>
+        </div>
+
+        {/* ── Comment input field ── */}
+        <div className="flex items-center gap-2 px-3.5 py-2.5 mt-1 border-t border-[#efefef]">
+          <Avatar size={24} platform="instagram" />
+          <span className="text-[13px] text-[#8e8e8e] flex-1">Add a comment…</span>
+          <button className="text-[13px] font-semibold text-[#0095f6] opacity-60 hover:opacity-100">
+            Post
+          </button>
+        </div>
       </div>
     </Shell>
   );
@@ -926,64 +1024,65 @@ function FacebookStoryPost({
 
   return (
     <PhoneFrame platform="facebook">
-      <div className="relative w-full bg-black" style={{ aspectRatio: "9/16" }}>
+      <div className="relative w-full bg-black text-white font-sans overflow-hidden select-none" style={{ aspectRatio: "9/16" }}>
         {/* Media */}
         {imageSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageSrc}
-            alt="Story"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+          <img src={imageSrc} alt="Facebook Story" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#1c1c1e] to-[#2a2a2e] text-white/60">
             <div className="flex flex-col items-center gap-3">
-              <ImageIcon className="size-10" />
-              <span className="text-[13px]">Upload an image to preview</span>
+              <ImageIcon className="size-12 stroke-[1.5]" />
+              <span className="text-[13px] font-medium">Upload photo for Story</span>
             </div>
           </div>
         )}
 
-        {/* Top bar — FB Story style */}
-        <div className="absolute top-0 inset-x-0 h-1 bg-white/30 z-10">
-          <div className="h-full bg-white w-1/3 rounded-r-full" />
+        {/* Top Story Segments */}
+        <div className="absolute top-3 inset-x-3 flex gap-1 z-20">
+          <div className="h-[2.5px] flex-1 rounded-full bg-white" />
+          <div className="h-[2.5px] flex-1 rounded-full bg-white/40" />
+          <div className="h-[2.5px] flex-1 rounded-full bg-white/40" />
         </div>
 
-        {/* Top: profile + CTA */}
-        <div className="absolute top-5 inset-x-4 flex items-center gap-2 z-10">
-          <Avatar size={32} ring />
-          <div>
-            <span className="text-white text-[14px] font-semibold drop-shadow">
-              {BRAND_NAME}
-            </span>
-            <p className="text-[11px] text-white/70 drop-shadow">Just now</p>
+        {/* Top Profile Header */}
+        <div className="absolute top-7 inset-x-4 flex items-center justify-between z-20">
+          <div className="flex items-center gap-2.5">
+            <Avatar size={34} ring platform="facebook" />
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-[14px] font-bold drop-shadow">{BRAND_NAME}</span>
+                <VerifiedBadge platform="facebook" />
+              </div>
+              <span className="text-[11px] text-white/80 drop-shadow">Just now</span>
+            </div>
           </div>
-          <button className="ml-auto px-3 py-1 text-[12px] font-semibold text-black bg-white rounded-full">
+
+          <button className="px-3 py-1 text-[11px] font-semibold text-black bg-white rounded-full shadow hover:bg-neutral-100 transition-colors">
             Follow
           </button>
         </div>
 
-        {/* Bottom: caption */}
-        <div className="absolute inset-x-4 bottom-4 z-10 max-w-[85%]">
-          {body && (
-            <p className="text-[14px] text-white leading-snug drop-shadow whitespace-pre-line">
-              {body}
-            </p>
-          )}
-        </div>
-
-        {/* CTA button (FB Story style) */}
-        {caption.cta && (
-          <div className="absolute inset-x-0 bottom-16 flex justify-center z-10">
-            <button className="px-5 py-2 text-[13px] font-semibold text-black bg-white rounded-full shadow-lg">
-              {caption.cta}
-            </button>
+        {/* Caption Overlay */}
+        {body && (
+          <div className="absolute inset-x-4 bottom-20 z-20 bg-black/40 backdrop-blur-md rounded-[8px] p-3.5 border border-white/10 shadow-lg">
+            <p className="text-[13px] text-white leading-snug whitespace-pre-line">{body}</p>
           </div>
         )}
+
+        {/* Bottom Quick Reply Bar */}
+        <div className="absolute inset-x-4 bottom-4 z-20 flex items-center gap-2">
+          <div className="flex-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 px-3.5 py-2 text-[12px] text-white/80">
+            Send message…
+          </div>
+          <button className="size-9 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center hover:bg-black/60">
+            👍
+          </button>
+          <button className="size-9 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center hover:bg-black/60">
+            ❤️
+          </button>
+        </div>
       </div>
-      <p className="text-center text-[12px] text-[var(--body-subtle)] mt-2">
-        Facebook Story
-      </p>
     </PhoneFrame>
   );
 }
@@ -1014,7 +1113,7 @@ function FacebookReelPost({
 
   return (
     <PhoneFrame platform="facebook">
-      <div className="relative w-full bg-black" style={{ aspectRatio: "9/16" }}>
+      <div className="relative w-full bg-black text-white font-sans overflow-hidden select-none" style={{ aspectRatio: "9/16" }}>
         {/* Media */}
         {isVideo && videoSrc ? (
           <video
@@ -1028,129 +1127,79 @@ function FacebookReelPost({
           />
         ) : imageSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageSrc}
-            alt="Reel"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+          <img src={imageSrc} alt="Facebook Reel" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[#1c1c1e] text-white/60">
             <div className="flex flex-col items-center gap-3">
-              <Film className="size-10" />
-              <span className="text-[13px]">Upload a video to preview</span>
+              <Film className="size-12 stroke-[1.5]" />
+              <span className="text-[13px] font-medium">Upload video for Facebook Reel</span>
             </div>
           </div>
         )}
 
-        {/* Top gradient */}
-        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+        {/* Scrims */}
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/75 to-transparent pointer-events-none z-10" />
+        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 to-transparent pointer-events-none z-10" />
 
-        {/* Progress bar */}
-        <div className="absolute top-2 inset-x-3 flex gap-1 z-10">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-[3px] flex-1 rounded-full bg-white/30 overflow-hidden"
-            >
-              <div
-                className={cn(
-                  "h-full bg-white rounded-full transition-all duration-300",
-                  i === 0 ? "w-2/3" : "w-0"
-                )}
-              />
+        {/* Header */}
+        <div className="absolute top-8 inset-x-4 flex items-center justify-between z-20">
+          <div className="flex items-center gap-2">
+            <Avatar size={34} platform="facebook" />
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-[14px] font-bold text-white drop-shadow">{BRAND_NAME}</span>
+                <VerifiedBadge platform="facebook" />
+              </div>
+              <span className="text-[11px] text-white/70">Reels</span>
             </div>
-          ))}
-        </div>
-
-        {/* Top: profile info */}
-        <div className="absolute top-8 inset-x-3 flex items-center gap-2 z-10">
-          <Avatar size={32} />
-          <div>
-            <span className="text-white text-[14px] font-semibold drop-shadow">
-              {BRAND_NAME}
-            </span>
           </div>
-          <button className="ml-auto px-3 py-1 text-[12px] font-semibold text-black bg-white rounded-full">
+          <button className="px-3.5 py-1 text-[12px] font-semibold text-black bg-white rounded-full shadow hover:bg-neutral-100 transition-colors">
             Follow
           </button>
         </div>
 
-        {/* Bottom gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-
-        {/* Right actions */}
-        <div className="absolute right-3 bottom-20 flex flex-col items-center gap-5 z-10">
+        {/* Right side actions */}
+        <div className="absolute right-3.5 bottom-20 z-20 flex flex-col items-center gap-4">
           <button className="flex flex-col items-center gap-0.5">
-            <div className="size-10 rounded-full bg-black/30 backdrop-blur flex items-center justify-center">
+            <div className="size-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center shadow">
               <ThumbsUp className="size-5 text-white" />
             </div>
-            <span className="text-[12px] text-white font-medium">Like</span>
+            <span className="text-[11px] font-medium text-white">2.4K</span>
           </button>
           <button className="flex flex-col items-center gap-0.5">
-            <div className="size-10 rounded-full bg-black/30 backdrop-blur flex items-center justify-center">
+            <div className="size-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center shadow">
               <MessageCircle className="size-5 text-white" />
             </div>
-            <span className="text-[12px] text-white font-medium">Comment</span>
+            <span className="text-[11px] font-medium text-white">128</span>
           </button>
           <button className="flex flex-col items-center gap-0.5">
-            <div className="size-10 rounded-full bg-black/30 backdrop-blur flex items-center justify-center">
-              <Send className="size-5 text-white" />
+            <div className="size-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center shadow">
+              <Share2 className="size-5 text-white" />
             </div>
-            <span className="text-[12px] text-white font-medium">Share</span>
+            <span className="text-[11px] font-medium text-white">Share</span>
           </button>
         </div>
 
-        {/* Mute button */}
-        {isVideo && (
-          <button
-            onClick={() => setMuted(!muted)}
-            className="absolute bottom-20 left-3 size-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center z-10"
-          >
-            {muted ? (
-              <VolumeX className="size-4 text-white" />
-            ) : (
-              <Volume2 className="size-4 text-white" />
-            )}
-          </button>
-        )}
-
-        {/* Audio label */}
-        {audioName && (
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 max-w-[55%]">
-            <Music2 className="size-3.5 text-white shrink-0 drop-shadow" />
-            <span className="text-[12px] text-white font-medium truncate drop-shadow">
-              {audioName}
-            </span>
-            {onAudioPlay && (
-              <button
-                onClick={onAudioPlay}
-                className="shrink-0 size-6 rounded-full bg-white/20 backdrop-blur flex items-center justify-center"
-              >
-                {isAudioPlaying ? (
-                  <Pause className="size-3 text-white fill-white" />
-                ) : (
-                  <Play className="size-3 text-white fill-white ml-[1px]" />
-                )}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Caption at bottom */}
-        <div className="absolute inset-x-3 z-10 max-w-[70%]" style={{ bottom: audioName ? "3.5rem" : "0.75rem" }}>
+        {/* Caption & audio */}
+        <div className="absolute left-4 bottom-8 right-16 z-20 space-y-2">
           {body && (
-            <p className="text-[14px] text-white leading-snug drop-shadow line-clamp-3 whitespace-pre-line">
+            <p className="text-[13px] text-white leading-snug drop-shadow line-clamp-3 whitespace-pre-line">
               {body}
             </p>
           )}
-          <p className="text-[12px] text-white/70 mt-1">
-            {BRAND_NAME} · Just now
-          </p>
+          {audioName && (
+            <div className="flex items-center gap-2 text-[12px] text-white/90 pt-1">
+              <Music2 className="size-3.5 text-[#1877f2]" />
+              <span className="truncate font-medium">{audioName}</span>
+              {onAudioPlay && (
+                <button onClick={onAudioPlay} className="size-4.5 rounded-full bg-white/20 flex items-center justify-center">
+                  {isAudioPlaying ? <Pause className="size-2 fill-white" /> : <Play className="size-2 fill-white ml-[1px]" />}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-      <p className="text-center text-[12px] text-[var(--body-subtle)] mt-2">
-        Facebook Reel
-      </p>
     </PhoneFrame>
   );
 }
@@ -1179,13 +1228,13 @@ function InstagramReelPost({
   const [muted, setMuted] = useState(true);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const body = formatCaption(caption);
-  const hasCaption = Boolean(body);
 
   return (
     <PhoneFrame platform="instagram">
-      <div className="relative w-full bg-black" style={{ aspectRatio: "9/16" }}>
-        {/* Media */}
+      <div className="relative w-full bg-black text-white font-sans overflow-hidden select-none" style={{ aspectRatio: "9/16" }}>
+        {/* Media Background */}
         {isVideo && videoSrc ? (
           <video
             src={videoSrc}
@@ -1198,119 +1247,159 @@ function InstagramReelPost({
           />
         ) : imageSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageSrc}
-            alt="Reel"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+          <img src={imageSrc} alt="Reel media" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[#1c1c1e] text-white/60">
             <div className="flex flex-col items-center gap-3">
-              <Film className="size-10" />
-              <span className="text-[13px]">Upload a video to preview</span>
+              <Film className="size-12 stroke-[1.5]" />
+              <span className="text-[13px] font-medium">Upload video for Reel</span>
             </div>
           </div>
         )}
 
-        {/* Top gradient */}
-        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/50 to-transparent pointer-events-none" />
+        {/* Top Gradient Scrim */}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/70 via-black/30 to-transparent pointer-events-none z-10" />
 
-        {/* Top header */}
-        <div className="absolute top-8 inset-x-4 flex items-center gap-3 z-10">
-          <span className="text-white text-[15px] font-semibold drop-shadow">
-            Reels
-          </span>
-          <ChevronRight className="size-4 text-white/80" />
-          {/* Camera/upload button (IG style) */}
-          <div className="ml-auto size-8 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
-            <Film className="size-4 text-white" />
+        {/* Reel Top Header */}
+        <div className="absolute top-8 inset-x-4 flex items-center justify-between z-20">
+          <div className="flex items-center gap-1.5 cursor-pointer">
+            <span className="text-[17px] font-bold drop-shadow-md">Reels</span>
+            <ChevronRight className="size-4 opacity-80" />
           </div>
-        </div>
 
-        {/* Bottom gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-
-        {/* Right action buttons */}
-        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10">
-          <button onClick={() => setLiked(!liked)} className="flex flex-col items-center gap-1 group">
-            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
-              <Heart className={cn("size-6 drop-shadow transition-colors", liked ? "fill-[#ed4956] text-[#ed4956]" : "text-white")} />
-            </div>
-            <span className="text-[12px] text-white font-medium">1.2K</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 group">
-            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
-              <MessageCircle className="size-6 text-white drop-shadow" />
-            </div>
-            <span className="text-[12px] text-white font-medium">84</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 group">
-            <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
-              <Send className="size-5 text-white drop-shadow" />
-            </div>
-          </button>
-          <div className="mt-2">
-            <button onClick={() => setSaved(!saved)} className="flex flex-col items-center gap-1 group">
-              <div className="size-10 rounded-full bg-black/20 backdrop-blur flex items-center justify-center group-active:scale-90 transition-transform">
-                <Bookmark className={cn("size-5 drop-shadow transition-colors", saved ? "fill-white text-white" : "text-white")} />
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Mute button */}
-        {isVideo && (
-          <button
-            onClick={() => setMuted(!muted)}
-            className="absolute bottom-24 left-3 size-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center z-10"
-          >
-            {muted ? <VolumeX className="size-4 text-white" /> : <Volume2 className="size-4 text-white" />}
-          </button>
-        )}
-
-        {/* Bottom info — dynamic based on caption */}
-        <div className="absolute inset-x-4 z-10 max-w-[75%]" style={{ bottom: audioName || hasCaption ? "3.5rem" : "4.5rem" }}>
-          <p className="text-[14px] text-white font-semibold drop-shadow flex items-center gap-1">
-            {BRAND_HANDLE}
-            <span className="inline-flex items-center justify-center size-[14px] rounded-full bg-[#0095f6] text-white text-[8px]">✓</span>
-            <span className="text-[12px] text-white/70 font-normal ml-1">· 2h ago</span>
-          </p>
-          {hasCaption && (
-            <p className="text-[13px] text-white/90 leading-snug drop-shadow mt-1 line-clamp-2 whitespace-pre-line">
-              {body}
-            </p>
-          )}
-          <p className="text-[12px] text-white/80 mt-1 flex items-center gap-1">
-            <Music2 className="size-3 shrink-0" />
-            {audioName ? (
-              <span className="truncate">{audioName}</span>
-            ) : (
-              <span>Original audio · TallinnDoll</span>
-            )}
-            {onAudioPlay && (
-              <button onClick={onAudioPlay} className="shrink-0 ml-1">
-                {isAudioPlaying ? (
-                  <Pause className="size-3 text-white fill-white" />
-                ) : (
-                  <Play className="size-3 text-white fill-white" />
-                )}
+          <div className="flex items-center gap-2">
+            {isVideo && (
+              <button
+                onClick={() => setMuted(!muted)}
+                className="size-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center hover:bg-black/60"
+              >
+                {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
               </button>
             )}
-          </p>
+            <div className="size-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center">
+              <Camera className="size-4" />
+            </div>
+          </div>
         </div>
 
-        {/* Bottom nav (IG style) */}
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-around py-3 px-4 bg-black/60 backdrop-blur-sm z-10 border-t border-white/10">
-          <Home className="size-6 text-white" />
-          <Search className="size-6 text-white/60" />
-          <PlusSquare className="size-6 text-white/60" />
-          <Film className="size-6 text-white" />
-          <User className="size-6 text-white/60" />
+        {/* Bottom Gradient Scrim */}
+        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-10" />
+
+        {/* Right-Hand Action Column */}
+        <div className="absolute right-3.5 bottom-24 z-20 flex flex-col items-center gap-4.5">
+          {/* Like */}
+          <button
+            onClick={() => setLiked(!liked)}
+            className="flex flex-col items-center gap-1 group active:scale-90 transition-transform"
+          >
+            <div className="size-10 rounded-full bg-black/25 backdrop-blur-md flex items-center justify-center shadow-lg">
+              <Heart
+                className={cn(
+                  "size-6 drop-shadow-md transition-colors",
+                  liked ? "fill-[#ed4956] text-[#ed4956]" : "text-white"
+                )}
+              />
+            </div>
+            <span className="text-[11px] font-semibold text-white drop-shadow">
+              {liked ? "14.3K" : "14.2K"}
+            </span>
+          </button>
+
+          {/* Comments */}
+          <button className="flex flex-col items-center gap-1 group active:scale-90 transition-transform">
+            <div className="size-10 rounded-full bg-black/25 backdrop-blur-md flex items-center justify-center shadow-lg">
+              <MessageCircle className="size-6 text-white drop-shadow-md" />
+            </div>
+            <span className="text-[11px] font-semibold text-white drop-shadow">342</span>
+          </button>
+
+          {/* Share */}
+          <button className="flex flex-col items-center gap-1 group active:scale-90 transition-transform">
+            <div className="size-10 rounded-full bg-black/25 backdrop-blur-md flex items-center justify-center shadow-lg">
+              <Send className="size-5.5 text-white drop-shadow-md" />
+            </div>
+            <span className="text-[11px] font-semibold text-white drop-shadow">1.1K</span>
+          </button>
+
+          {/* Bookmark */}
+          <button
+            onClick={() => setSaved(!saved)}
+            className="flex flex-col items-center gap-1 group active:scale-90 transition-transform"
+          >
+            <div className="size-10 rounded-full bg-black/25 backdrop-blur-md flex items-center justify-center shadow-lg">
+              <Bookmark
+                className={cn(
+                  "size-5.5 drop-shadow-md transition-colors",
+                  saved ? "fill-white text-white" : "text-white"
+                )}
+              />
+            </div>
+          </button>
+
+          {/* Spinning Vinyl Album Art */}
+          <div className="mt-1">
+            <div className="relative size-8 rounded-full border-2 border-white/60 bg-neutral-900 flex items-center justify-center animate-[spin_4s_linear_infinite] shadow-lg">
+              <span className="size-2.5 rounded-full bg-white ring-2 ring-black" />
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Left Creator & Caption Row */}
+        <div className="absolute left-4 bottom-18 right-16 z-20 space-y-2">
+          {/* Creator handle + Follow pill */}
+          <div className="flex items-center gap-2">
+            <Avatar size={32} ring platform="instagram" />
+            <div className="flex items-center gap-1">
+              <span className="text-[14px] font-bold text-white drop-shadow-md">{BRAND_HANDLE}</span>
+              <VerifiedBadge platform="instagram" />
+            </div>
+            <button className="px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-[11px] font-semibold text-white transition-colors">
+              Follow
+            </button>
+          </div>
+
+          {/* Expandable Caption */}
+          {body && (
+            <p className="text-[13px] text-white/95 leading-snug drop-shadow-md whitespace-pre-line break-words">
+              {body.length > 90 && !expanded ? (
+                <>
+                  {body.slice(0, 90)}…{" "}
+                  <button onClick={() => setExpanded(true)} className="font-semibold text-white/80 hover:underline">
+                    more
+                  </button>
+                </>
+              ) : (
+                renderFormattedCaption(body)
+              )}
+            </p>
+          )}
+
+          {/* Audio Ticker with Sound Waves */}
+          <div className="flex items-center gap-2 pt-1 text-[12px] text-white/90">
+            <Music2 className="size-3.5 shrink-0 text-white animate-pulse" />
+            <span className="truncate font-medium drop-shadow">
+              {audioName ? audioName : `Original audio · ${BRAND_NAME}`}
+            </span>
+            {onAudioPlay && (
+              <button
+                onClick={onAudioPlay}
+                className="size-5 rounded-full bg-white/20 backdrop-blur flex items-center justify-center shrink-0"
+              >
+                {isAudioPlaying ? <Pause className="size-2.5 fill-white" /> : <Play className="size-2.5 fill-white ml-[1px]" />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom Instagram App Navigation */}
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-around py-3 px-4 bg-black/80 backdrop-blur-md z-20 border-t border-white/10">
+          <Home className="size-5.5 text-white/70 hover:text-white" />
+          <Search className="size-5.5 text-white/70 hover:text-white" />
+          <PlusSquare className="size-5.5 text-white/70 hover:text-white" />
+          <Film className="size-5.5 text-white fill-white" />
+          <User className="size-5.5 text-white/70 hover:text-white" />
         </div>
       </div>
-      <p className="text-center text-[12px] text-[var(--body-subtle)] mt-2">
-        Instagram Reel
-      </p>
     </PhoneFrame>
   );
 }

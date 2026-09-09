@@ -48,6 +48,13 @@ import {
   ChevronDown,
   Upload,
   X,
+  Wand2,
+  Check,
+  ArrowRight,
+  Hash,
+  Type,
+  Layers,
+  Share2,
 } from "lucide-react";
 
 // ── Constants ──
@@ -414,6 +421,8 @@ export default function PostComposer({
           const { dataUrl } = await formatImageSmart(activeFile.dataUrl, preset, {
             onStage: (s) => { if (!cancelled) setFmtStatus(s); },
             description: caption.headline ? `${caption.headline} fashion photo` : undefined,
+            focusX,
+            focusY,
           });
           if (!cancelled) updateActiveFileCrops({ [preset.key]: dataUrl });
         } catch { /* keep contain-fit */ }
@@ -1020,6 +1029,15 @@ export default function PostComposer({
   const hasCaption =
     caption.headline || caption.primaryText || caption.hashtags || caption.cta;
 
+  const primaryChars = caption.primaryText?.length || 0;
+  const totalChars =
+    (caption.headline ? caption.headline.length + 2 : 0) +
+    primaryChars +
+    (caption.hashtags ? caption.hashtags.length + 2 : 0) +
+    (caption.cta ? caption.cta.length + 2 : 0);
+  const tagMatches = caption.hashtags?.match(/#[a-zA-Z0-9_\u00C0-\u024F]+/g) || [];
+  const tagCount = tagMatches.length;
+
   // ── Preview slides for carousel ──
   const previewSlides = mediaFiles.map((f) => ({
     formatted: f.dataUrl,
@@ -1175,33 +1193,66 @@ export default function PostComposer({
       )}
 
       {/* ── Two-column layout: Editor | Live Preview ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ============================================================ */}
-        {/* LEFT COLUMN — Composer                                         */}
+        {/* LEFT COLUMN — Composer (7 cols)                             */}
         {/* ============================================================ */}
-        <div className={cn(CARD, "p-5 space-y-4")}>
-          {/* Section: AI Caption Generator */}
-          <div className="flex items-start gap-3">
-            <Sparkles className="size-5 text-[var(--brand)] shrink-0 mt-0.5" />
-            <div>
-              <h2 className="text-[16px] font-semibold text-[var(--heading)]">
-                Caption Generator
-              </h2>
-              <p className="text-[13px] text-[var(--body)] mt-0.5">
-                Estonian brand-voice copy, tailored to the placement
-              </p>
+        <div className={cn(CARD, "p-5 lg:col-span-6 xl:col-span-6 space-y-5")}>
+          {/* Section: AI Caption Generator Header */}
+          <div className="flex items-center justify-between pb-3.5 border-b border-[var(--border-default)] flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div
+                className="size-8 rounded-[2px] flex items-center justify-center text-white shadow-xs"
+                style={GRADIENT_BRAND}
+              >
+                <Sparkles className="size-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[15px] font-semibold text-[var(--heading)]">
+                    AI Copywriter
+                  </h2>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)] border border-[var(--brand)]/20 uppercase tracking-wider">
+                    TallinnDoll Voice
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--body-subtle)] mt-0.5">
+                  Placement-aware copy tailored for luxury fashion
+                </p>
+              </div>
+            </div>
+
+            {/* Language Toggle */}
+            <div className="inline-flex rounded-[2px] p-0.5 bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)]">
+              {(["Estonian", "English"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setLanguage(lang)}
+                  className={cn(
+                    "px-2.5 py-1 text-[12px] font-medium rounded-[2px] transition-all flex items-center gap-1.5 cursor-pointer",
+                    language === lang
+                      ? "text-white shadow-xs font-semibold"
+                      : "text-[var(--body-subtle)] hover:text-[var(--heading)]"
+                  )}
+                  style={language === lang ? GRADIENT_BRAND : undefined}
+                >
+                  <span className="text-[12px]">{lang === "Estonian" ? "🇪🇪" : "🇬🇧"}</span>
+                  <span>{lang}</span>
+                </button>
+              ))}
             </div>
           </div>
 
           {/* Selectors */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Collection">
+            <Field label="Collection" hint="Active seasonal collection">
               <input
                 list="collection-list"
                 value={collection}
                 onChange={(e) => setCollection(e.target.value)}
                 placeholder="Type or select…"
-                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
+                className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none transition-colors focus:border-[var(--brand)]"
                 style={INPUT_STYLE}
               />
               <datalist id="collection-list">
@@ -1210,13 +1261,13 @@ export default function PostComposer({
                 ))}
               </datalist>
             </Field>
-            <Field label="Post type">
+            <Field label="Post Type" hint="Campaign objective">
               <input
                 list="posttype-list"
                 value={postType}
                 onChange={(e) => setPostType(e.target.value)}
                 placeholder="Type or select…"
-                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
+                className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none transition-colors focus:border-[var(--brand)]"
                 style={INPUT_STYLE}
               />
               <datalist id="posttype-list">
@@ -1227,40 +1278,17 @@ export default function PostComposer({
             </Field>
           </div>
 
-          {/* Language */}
-          <Field label="Language">
-            <div className="flex gap-2">
-              {(["Estonian", "English"] as const).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
-                  className={cn(
-                    "px-3 py-2 text-[13px] font-medium rounded-[2px] transition-colors",
-                    language === lang ? "text-white" : "text-[var(--body-subtle)]"
-                  )}
-                  style={
-                    language === lang
-                      ? GRADIENT_BRAND
-                      : {
-                          backgroundColor: "var(--neutral-secondary-medium)",
-                          border: "1px solid var(--border-default-medium)",
-                        }
-                  }
-                >
-                  {lang === "Estonian" ? "🇪🇪" : "🇬🇧"} {lang}
-                </button>
-              ))}
-            </div>
-          </Field>
-
           {/* Detail / context */}
-          <Field label="Details / context (optional)">
+          <Field
+            label="Creative Brief & Context (Optional)"
+            hint="Describe materials, styling vibe, price point, or promotional offers"
+          >
             <textarea
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
               rows={2}
-              placeholder="e.g. linen midi dress, sunset shoot, new arrival — anything the AI should mention"
-              className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none resize-none"
+              placeholder="e.g. Silk midi dress with contrast belt, golden hour outdoor shoot in Tallinn, 15% pre-order gift code..."
+              className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none resize-none transition-colors focus:border-[var(--brand)]"
               style={INPUT_STYLE}
             />
           </Field>
@@ -1269,131 +1297,263 @@ export default function PostComposer({
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white rounded-[2px] transition-all hover:opacity-95 active:scale-[0.99] disabled:opacity-60 shadow-xs cursor-pointer"
             style={GRADIENT_BRAND}
           >
             {generating ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Sparkles className="size-4" />
+              <Wand2 className="size-4" />
             )}
             {generating
-              ? "Generating…"
-              : `Generate ${surface === "story" ? "story copy" : "caption"}`}
+              ? "Crafting Brand Copy…"
+              : `Generate ${surface === "story" ? "Story Copy" : "Caption"}`}
           </button>
 
           {genError && (
-            <p className="text-[12px] text-[var(--danger)]">{genError}</p>
+            <p className="text-[12px] text-[var(--danger)] bg-[var(--danger)]/10 px-3 py-2 rounded-[2px] border border-[var(--danger)]/20">
+              {genError}
+            </p>
           )}
 
           {/* ── Editable caption fields ── */}
-          <div className="space-y-3 pt-2 border-t border-[var(--border-default)]">
-            <Field label="Headline">
+          <div className="space-y-3.5 pt-3 border-t border-[var(--border-default)]">
+            <Field
+              label="Headline"
+              rightAccessory={
+                <span className="text-[11px] text-[var(--body-subtle)]">
+                  {caption.headline?.length || 0} chars
+                </span>
+              }
+            >
               <input
                 value={caption.headline}
                 onChange={(e) => setCaption({ ...caption, headline: e.target.value })}
-                placeholder="Catchy headline for the post"
-                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none"
+                placeholder="Catchy headline for the post (e.g. New in: Linen Elegance)"
+                className="w-full px-3 py-2 text-[13px] font-medium rounded-[2px] focus:outline-none transition-colors focus:border-[var(--brand)]"
                 style={INPUT_STYLE}
               />
             </Field>
-            <Field label="Body copy">
+
+            <Field
+              label="Caption Body"
+              rightAccessory={
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-[11px] font-medium",
+                      primaryChars > 2200
+                        ? "text-[var(--danger)] font-bold"
+                        : primaryChars > 2000
+                          ? "text-amber-500 font-semibold"
+                          : "text-[var(--body-subtle)]"
+                    )}
+                  >
+                    {primaryChars.toLocaleString()} / 2,200 chars
+                  </span>
+                </div>
+              }
+            >
               <textarea
                 value={caption.primaryText}
                 onChange={(e) => setCaption({ ...caption, primaryText: e.target.value })}
-                rows={3}
-                placeholder="Main caption — supports emojis, line breaks, mentions, and hashtags"
-                className="w-full px-3 py-2 text-[14px] rounded-[2px] focus:outline-none resize-none"
+                rows={4}
+                placeholder="Main caption — emojis, styling advice, product highlights, and mentions..."
+                className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none resize-none transition-colors focus:border-[var(--brand)] leading-relaxed"
                 style={INPUT_STYLE}
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Hashtags">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field
+                label="Hashtags"
+                rightAccessory={
+                  <span
+                    className={cn(
+                      "text-[11px] font-medium",
+                      tagCount > 30 ? "text-[var(--danger)] font-bold" : "text-[var(--body-subtle)]"
+                    )}
+                  >
+                    {tagCount} / 30 tags
+                  </span>
+                }
+              >
                 <input
                   value={caption.hashtags}
                   onChange={(e) => setCaption({ ...caption, hashtags: e.target.value })}
-                  placeholder="#tallindoll #fashion"
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
+                  placeholder="#tallindoll #nordicfashion #estoniandesign"
+                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none transition-colors focus:border-[var(--brand)]"
                   style={{ ...INPUT_STYLE, color: "var(--brand)" }}
                 />
               </Field>
-              <Field label="Call to action">
+
+              <Field label="Call to Action (CTA)">
                 <input
                   value={caption.cta}
                   onChange={(e) => setCaption({ ...caption, cta: e.target.value })}
-                  placeholder="Shop Now →"
-                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none"
+                  placeholder="Avasta e-poest →"
+                  className="w-full px-3 py-2 text-[13px] rounded-[2px] focus:outline-none transition-colors focus:border-[var(--brand)]"
                   style={INPUT_STYLE}
                 />
               </Field>
             </div>
+
+            {/* Quick CTA suggestions */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] uppercase font-bold text-[var(--body-subtle)] tracking-wider mr-1">
+                Suggestions:
+              </span>
+              {[
+                "Avasta e-poest →",
+                "Link biograafias 🔗",
+                "Shop collection online →",
+                "Saadaval Tallinna stuudios",
+              ].map((ctaText) => (
+                <button
+                  key={ctaText}
+                  type="button"
+                  onClick={() => setCaption((c) => ({ ...c, cta: ctaText }))}
+                  className="text-[11px] px-2 py-0.5 rounded-[2px] bg-[var(--neutral-secondary-medium)] hover:bg-[var(--brand-softer)] text-[var(--body)] hover:text-[var(--brand)] border border-[var(--border-default)] transition-colors cursor-pointer"
+                >
+                  {ctaText}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* ── Publish-to targeting ── */}
-          <div className="p-4 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] space-y-3">
-            <div className="flex items-center gap-2">
-              <Send className="size-3.5 text-[var(--brand)]" />
-              <span className="text-[12px] font-semibold text-[var(--heading)] uppercase tracking-wider">
-                Publish to
-              </span>
-              <span className="text-[11px] text-[var(--body-subtle)] ml-auto">
-                {targets.length} destination{targets.length !== 1 ? "s" : ""}
+          {/* ── Publish-to targeting card (Meta Business Suite Standard) ── */}
+          <div className="p-4 rounded-[2px] bg-[var(--neutral-secondary-medium)] border border-[var(--border-default)] space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Share2 className="size-3.5 text-[var(--brand)]" />
+                <span className="text-[12px] font-bold text-[var(--heading)] uppercase tracking-wider">
+                  Publish Destinations
+                </span>
+              </div>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-[2px] bg-[var(--neutral-tertiary)] text-[var(--body)]">
+                {targets.length} placement{targets.length !== 1 ? "s" : ""} selected
               </span>
             </div>
 
-            {/* Platform chips */}
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-[var(--body-subtle)] w-20 shrink-0">Platform</span>
-              {(["instagram", "facebook"] as const).map((p) => {
-                const on = targetPlatforms.includes(p);
+            {/* Platform Selection Cards */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Instagram Card */}
+              {(() => {
+                const on = targetPlatforms.includes("instagram");
                 return (
                   <button
-                    key={p}
-                    onClick={() => setTargetPlatforms((prev) => toggleIn(prev, p))}
+                    type="button"
+                    onClick={() => setTargetPlatforms((prev) => toggleIn(prev, "instagram"))}
                     className={cn(
-                      "px-3 py-1.5 text-[13px] font-medium rounded-[2px] border transition-all capitalize",
+                      "flex items-center gap-2.5 p-2.5 rounded-[2px] border text-left transition-all cursor-pointer",
                       on
-                        ? "text-white border-transparent"
-                        : "text-[var(--body-subtle)] border-[var(--border-default)] hover:bg-[var(--neutral-primary-soft)]"
+                        ? "border-[var(--brand)] bg-[var(--brand-softer)] shadow-xs"
+                        : "border-[var(--border-default)] bg-[var(--neutral-primary-soft)] hover:border-[var(--border-default-medium)]"
                     )}
-                    style={on ? GRADIENT_BRAND : undefined}
                   >
-                    {p}
+                    <div className="size-6 rounded-[4px] bg-gradient-to-tr from-[#fd5949] via-[#d6249f] to-[#285AEB] flex items-center justify-center text-white shrink-0 shadow-xs">
+                      <svg viewBox="0 0 24 24" className="size-3.5" fill="none">
+                        <rect width="20" height="20" x="2" y="2" rx="5" stroke="currentColor" strokeWidth="2" />
+                        <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+                        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-semibold text-[var(--heading)] leading-tight truncate">
+                        Instagram
+                      </p>
+                      <p className="text-[10px] text-[var(--body-subtle)] truncate">
+                        @tallinndolls
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        "size-4 rounded-[2px] flex items-center justify-center text-white text-[10px]",
+                        on ? "bg-[var(--brand)]" : "border border-[var(--border-default-strong)]"
+                      )}
+                    >
+                      {on && <Check className="size-3 stroke-[3]" />}
+                    </div>
                   </button>
                 );
-              })}
+              })()}
+
+              {/* Facebook Card */}
+              {(() => {
+                const on = targetPlatforms.includes("facebook");
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setTargetPlatforms((prev) => toggleIn(prev, "facebook"))}
+                    className={cn(
+                      "flex items-center gap-2.5 p-2.5 rounded-[2px] border text-left transition-all cursor-pointer",
+                      on
+                        ? "border-[#1877F2] bg-[#1877F2]/10 shadow-xs"
+                        : "border-[var(--border-default)] bg-[var(--neutral-primary-soft)] hover:border-[var(--border-default-medium)]"
+                    )}
+                  >
+                    <div className="size-6 rounded-[4px] bg-[#1877F2] flex items-center justify-center text-white shrink-0 shadow-xs">
+                      <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-semibold text-[var(--heading)] leading-tight truncate">
+                        Facebook Page
+                      </p>
+                      <p className="text-[10px] text-[var(--body-subtle)] truncate">
+                        TallinnDoll Official
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        "size-4 rounded-[2px] flex items-center justify-center text-white text-[10px]",
+                        on ? "bg-[#1877F2]" : "border border-[var(--border-default-strong)]"
+                      )}
+                    >
+                      {on && <Check className="size-3 stroke-[3]" />}
+                    </div>
+                  </button>
+                );
+              })()}
             </div>
 
-            {/* Placement chips */}
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-[var(--body-subtle)] w-20 shrink-0">Placement</span>
-              {(["feed", "story"] as const).map((s) => {
-                const on = effectivePlacements.includes(s);
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setTargetPlacements((prev) => toggleIn(prev, s))}
-                    className={cn(
-                      "px-3 py-1.5 text-[13px] font-medium rounded-[2px] border transition-all capitalize",
-                      on
-                        ? "text-white border-transparent"
-                        : "text-[var(--body-subtle)] border-[var(--border-default)] hover:bg-[var(--neutral-primary-soft)]"
-                    )}
-                    style={on ? GRADIENT_BRAND : undefined}
-                  >
-                    {s}
-                  </button>
-                );
-              })}
+            {/* Placement Chips */}
+            <div className="flex items-center gap-2 pt-1 border-t border-[var(--border-default)]">
+              <span className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider w-20 shrink-0">
+                Placements
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(["feed", "story"] as const).map((s) => {
+                  const on = effectivePlacements.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setTargetPlacements((prev) => toggleIn(prev, s))}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-[2px] border transition-all cursor-pointer",
+                        on
+                          ? "text-white border-transparent shadow-xs"
+                          : "text-[var(--body-subtle)] border-[var(--border-default)] hover:bg-[var(--neutral-primary-soft)] hover:text-[var(--heading)]"
+                      )}
+                      style={on ? GRADIENT_BRAND : undefined}
+                    >
+                      {s === "feed" ? <ImageIcon className="size-3" /> : <Film className="size-3" />}
+                      <span>{s === "feed" ? "Feed Post" : isVideo ? "Reels (9:16)" : "Stories (9:16)"}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* ── Action buttons ── */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3 pt-1">
             <button
               onClick={handleAddToQueue}
               disabled={!hasCaption}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-semibold rounded-[2px] border border-[var(--border-default)] text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)] transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
             >
               <Plus className="size-4" />
               Save Draft
@@ -1415,16 +1575,17 @@ export default function PostComposer({
                   })
                 }
                 disabled={!hasMedia}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-white rounded-[2px] transition-all hover:opacity-95 active:scale-[0.99] disabled:opacity-50 shadow-xs cursor-pointer"
                 style={GRADIENT_BRAND}
               >
-                Next → Preview
+                <span>Review &amp; Publish</span>
+                <ArrowRight className="size-4" />
               </button>
             ) : (
               <button
                 onClick={handlePublish}
                 disabled={hasActiveTasks || !hasCaption || !hasMedia}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-white rounded-[2px] transition-opacity hover:opacity-90 disabled:opacity-50 shadow-xs cursor-pointer"
                 style={GRADIENT_BRAND}
                 id="publish-trigger"
               >
@@ -1437,21 +1598,23 @@ export default function PostComposer({
               </button>
             )}
           </div>
-
         </div>
 
         {/* ============================================================ */}
-        {/* RIGHT COLUMN — Live Preview (sticky)                            */}
+        {/* RIGHT COLUMN — Live Preview (sticky, 6 cols)                  */}
         {/* ============================================================ */}
-        <div className="lg:sticky lg:top-4">
+        <div className="lg:sticky lg:top-4 lg:col-span-6 xl:col-span-6">
           <div className={cn(CARD, "p-5")}>
-            {/* ── Preview selector ── */}
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[var(--body-subtle)] uppercase tracking-wider">
-                  Preview
-                </span>
-                {/* Custom dropdown — reliable cross-browser styling */}
+            {/* ── Preview header & controls ── */}
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3 pb-3 border-b border-[var(--border-default)]">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[12px] font-bold text-[var(--heading)] uppercase tracking-wider">
+                    Live Mockup
+                  </span>
+                </div>
+                {/* Custom dropdown */}
                 <PreviewDropdown
                   options={previewOptions}
                   value={selectedPreviewId}
@@ -1461,30 +1624,32 @@ export default function PostComposer({
 
               {/* Device toggle (feed previews only) */}
               {showDeviceToggle && (
-                <div className="inline-flex rounded-[2px] border border-[var(--border-default)] overflow-hidden">
+                <div className="inline-flex rounded-[2px] border border-[var(--border-default)] overflow-hidden bg-[var(--neutral-secondary-medium)] p-0.5">
                   <button
                     onClick={() => setDevice("desktop")}
-                    title="Desktop view"
+                    title="Desktop browser view"
                     className={cn(
-                      "px-2 py-1.5 transition-colors",
+                      "flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-[2px] transition-colors cursor-pointer",
                       device === "desktop"
-                        ? "bg-[var(--brand-softer)] text-[var(--brand)]"
-                        : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                        ? "bg-[var(--brand)] text-white shadow-xs"
+                        : "text-[var(--body-subtle)] hover:text-[var(--heading)]"
                     )}
                   >
-                    <Monitor className="size-4" />
+                    <Monitor className="size-3.5" />
+                    <span className="hidden sm:inline">Desktop</span>
                   </button>
                   <button
                     onClick={() => setDevice("mobile")}
-                    title="Mobile view"
+                    title="Mobile app view (iOS titanium shell)"
                     className={cn(
-                      "px-2 py-1.5 transition-colors",
+                      "flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-[2px] transition-colors cursor-pointer",
                       device === "mobile"
-                        ? "bg-[var(--brand-softer)] text-[var(--brand)]"
-                        : "text-[var(--body-subtle)] hover:bg-[var(--neutral-secondary-medium)]"
+                        ? "bg-[var(--brand)] text-white shadow-xs"
+                        : "text-[var(--body-subtle)] hover:text-[var(--heading)]"
                     )}
                   >
-                    <Smartphone className="size-4" />
+                    <Smartphone className="size-3.5" />
+                    <span className="hidden sm:inline">Mobile</span>
                   </button>
                 </div>
               )}
@@ -1492,32 +1657,37 @@ export default function PostComposer({
 
             {/* ── Media info bar ── */}
             {hasMedia && (
-              <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)] text-[12px] font-medium">
-                {multiSlide ? (
-                  <>
-                    <ImageIcon className="size-3.5" />
-                    <span>
-                      Carousel — {mediaFiles.length} slides · Slide {activeSlideIdx + 1}/{mediaFiles.length}
-                    </span>
-                  </>
-                ) : isVideo ? (
-                  <>
-                    <Film className="size-3.5" />
-                    <span>Video · {selectedPreview.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon className="size-3.5" />
-                    <span>
-                      {activeFile?.file.name} · {activeFile?.width}×{activeFile?.height}
-                    </span>
-                  </>
-                )}
+              <div className="flex items-center justify-between gap-2 mb-3.5 px-3 py-2 rounded-[2px] bg-[var(--brand-softer)] text-[var(--brand)] text-[12px] font-medium border border-[var(--brand)]/15">
+                <div className="flex items-center gap-2 min-w-0">
+                  {multiSlide ? (
+                    <>
+                      <Layers className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        Carousel · {mediaFiles.length} slides (Viewing slide {activeSlideIdx + 1})
+                      </span>
+                    </>
+                  ) : isVideo ? (
+                    <>
+                      <Film className="size-3.5 shrink-0" />
+                      <span className="truncate">Video · {selectedPreview.label}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        {activeFile?.file.name} · {activeFile?.width}×{activeFile?.height}px
+                      </span>
+                    </>
+                  )}
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--brand)]/10 shrink-0">
+                  {surface === "story" ? "9:16 Full" : isVideo ? "1:1 Square" : "1:1 Square"}
+                </span>
               </div>
             )}
 
             {/* ── Preview area — single large preview ── */}
-            <div className="bg-[var(--neutral-secondary-medium)] rounded-[2px] p-4 sm:p-6 flex items-start justify-center min-h-[460px]">
+            <div className="bg-[var(--neutral-secondary-medium)]/80 rounded-[2px] p-3 sm:p-5 flex items-start justify-center min-h-[480px] border border-[var(--border-default)]">
               <div
                 key={fadeKey}
                 className="w-full flex justify-center animate-fade-in"
@@ -1526,20 +1696,21 @@ export default function PostComposer({
                   <PreviewSkeleton platform={platform} device={device} />
                 ) : !hasMedia ? (
                   /* Empty state */
-                  <div className="flex flex-col items-center gap-3 text-[var(--body-subtle)] py-16">
+                  <div className="flex flex-col items-center gap-3 text-[var(--body-subtle)] py-16 text-center">
                     <div
-                      className="size-16 rounded-full flex items-center justify-center"
+                      className="size-14 rounded-full flex items-center justify-center shadow-md"
                       style={GRADIENT_BRAND}
                     >
-                      <Eye className="size-7 text-white" />
+                      <Eye className="size-6 text-white" />
                     </div>
-                    <p className="text-[15px] font-semibold text-[var(--heading)]">
-                      Live Preview
-                    </p>
-                    <p className="text-[13px] text-center max-w-[280px]">
-                      Upload an image or video to see exactly how your post will look on{" "}
-                      {isVideo ? "Facebook and Instagram" : "Facebook or Instagram"}
-                    </p>
+                    <div>
+                      <p className="text-[15px] font-semibold text-[var(--heading)]">
+                        Live Social Post Mockup
+                      </p>
+                      <p className="text-[13px] text-[var(--body-subtle)] mt-1 max-w-[280px]">
+                        Upload an image or video to see the live Meta Business Suite simulation
+                      </p>
+                    </div>
                   </div>
                 ) : surface === "feed" ? (
                   /* ── Feed preview (image or video) ── */
@@ -1575,10 +1746,11 @@ export default function PostComposer({
             </div>
 
             {/* Preview footer */}
-            <p className="text-[11px] text-[var(--body-subtle)] mt-3 text-center">
-              <Eye className="size-3 inline mr-1" />
-              Live preview — updates instantly as you edit. Currently showing{" "}
-              <span className="font-medium text-[var(--body)]">{selectedPreview.label}</span>.
+            <p className="text-[11px] text-[var(--body-subtle)] mt-3 text-center flex items-center justify-center gap-1.5">
+              <Eye className="size-3 inline shrink-0" />
+              <span>
+                Real-time preview · Showing <strong className="text-[var(--heading)]">{selectedPreview.label}</strong>
+              </span>
             </p>
           </div>
         </div>
@@ -1587,9 +1759,7 @@ export default function PostComposer({
   );
 }
 
-// ── Utility: form field wrapper ──
-
-// ── Custom Preview Dropdown (reliable cross-browser styling) ──
+// ── Custom Preview Dropdown ──
 
 function PreviewDropdown({
   options,
@@ -1616,45 +1786,69 @@ function PreviewDropdown({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-1.5 pl-3 pr-2 py-2 text-[13px] font-semibold rounded-[2px] text-white transition-opacity hover:opacity-90"
+        className="inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 text-[12px] font-semibold rounded-[2px] text-white transition-opacity hover:opacity-90 shadow-xs cursor-pointer"
         style={GRADIENT_BRAND}
       >
-        {selected?.isVideo ? "🎬 " : "📷 "}
-        {selected?.label || "Select"}
-        <ChevronDown className="size-4" />
+        <span>{selected?.isVideo ? "🎬" : "📷"}</span>
+        <span>{selected?.label || "Select Preview"}</span>
+        <ChevronDown className="size-3.5 ml-0.5" />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-[260px] bg-[var(--neutral-primary)] border border-[var(--border-default-strong)] rounded-[2px] shadow-2xl overflow-hidden">
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => {
-                onChange(opt.id);
-                setOpen(false);
-              }}
-              className={cn(
-                "w-full text-left px-3 py-2.5 text-[13px] font-medium transition-colors flex items-center gap-2",
-                opt.id === value
-                  ? "bg-[var(--brand-softer)] text-[var(--brand)]"
-                  : "text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)]"
-              )}
-            >
-              {opt.isVideo ? "🎬" : "📷"} {opt.label}
-            </button>
-          ))}
+        <div className="absolute z-50 mt-1.5 w-[250px] bg-[var(--neutral-primary)] border border-[var(--border-default-strong)] rounded-[2px] shadow-xl overflow-hidden animate-fade-in">
+          <div className="p-1.5 space-y-0.5">
+            {options.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  onChange(opt.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full text-left px-2.5 py-2 text-[12px] font-medium transition-colors flex items-center justify-between rounded-[2px] cursor-pointer",
+                  opt.id === value
+                    ? "bg-[var(--brand-softer)] text-[var(--brand)] font-semibold"
+                    : "text-[var(--heading)] hover:bg-[var(--neutral-secondary-medium)]"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px]">{opt.isVideo ? "🎬" : "📷"}</span>
+                  <span>{opt.label}</span>
+                </div>
+                {opt.id === value && <Check className="size-3.5 stroke-[2.5]" />}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  rightAccessory,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  rightAccessory?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <label className="block text-[12px] font-medium text-[var(--body-subtle)] mb-1">
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="block text-[12px] font-semibold text-[var(--heading)]">
+          {label}
+        </label>
+        {rightAccessory}
+      </div>
       {children}
+      {hint && (
+        <p className="text-[11px] text-[var(--body-subtle)] mt-1">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
