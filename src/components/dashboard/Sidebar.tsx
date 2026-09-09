@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   PenSquare, FileText, Settings,
-  PanelLeftClose, PanelLeft, Lightbulb, Clock, Sparkles, Zap,
+  PanelLeftClose, PanelLeft, Lightbulb, Clock, Sparkles,
 } from "lucide-react";
 
 interface NavItem {
@@ -19,7 +19,6 @@ const navItems: NavItem[] = [
   { label: "Content & Posts", icon: PenSquare, href: "/content" },
   { label: "History", icon: Clock, href: "/history" },
   { label: "Story Detailing", icon: Sparkles, href: "/story-detailing" },
-  { label: "DM Automation", icon: Zap, href: "/dm-automation" },
   { label: "Strategy Agent", icon: Lightbulb, href: "/strategy" },
   { label: "Reports", icon: FileText, href: "/reports" },
   { label: "Settings", icon: Settings, href: "/settings" },
