@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TallinnDoll — Agentic Dashboard",
-  description: "AI-powered marketing & inventory analytics",
+  title: "Tallindolls — Dashboard",
+  description: "AI-powered marketing & content studio",
 };
 
 export default function RootLayout({

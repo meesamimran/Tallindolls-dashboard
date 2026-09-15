@@ -113,14 +113,14 @@ export default function SettingsPage() {
                 color: "var(--brand)",
               }}
             >
-              JD
+              TD
             </div>
             <div>
               <p className="text-[16px] font-semibold text-[var(--heading)]">
-                Jane Doe
+                Tallindolls
               </p>
               <p className="text-[14px] text-[var(--body)]">
-                jane@tallindoll.com
+                hello@tallindolls.com
               </p>
             </div>
             <span
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                 borderColor: "var(--border-brand-subtle)",
               }}
             >
-              Administrator
+              Owner
             </span>
           </div>
         </div>

@@ -53,8 +53,8 @@ export type PreviewDevice = "desktop" | "mobile";
 
 // ── Brand constants ──
 
-const BRAND_NAME = "TallinnDoll";
-const BRAND_HANDLE = "tallindoll";
+const BRAND_NAME = "Tallindolls";
+const BRAND_HANDLE = "tallindolls";
 
 const GRADIENT_BRAND: React.CSSProperties = {
   background: "linear-gradient(135deg, #C8399C 0%, #7C3AED 100%)",

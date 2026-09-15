@@ -13,7 +13,7 @@ export default function DashboardLayout({
 }) {
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(3);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const handleMenuClick = useCallback(() => {
     setMobileSidebarOpen(true);
@@ -58,7 +58,7 @@ export default function DashboardLayout({
         {/* Main Content */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <Header
-            title="Dashboard"
+            title="Tallindolls"
             onMenuClick={handleMenuClick}
             onNotificationClick={handleNotificationClick}
             notificationCount={notificationCount}

@@ -99,7 +99,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-[var(--brand)] shrink-0" />
             <span className="text-[var(--heading)] font-semibold text-[16px] tracking-tight">
-              TallinnDoll
+              Tallindolls
             </span>
           </div>
         )}
@@ -132,11 +132,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <div className="border-t border-[var(--border-default)] px-3 py-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-full bg-[var(--brand-softer)] flex items-center justify-center text-[var(--fg-brand)] text-xs font-bold shrink-0">
-              JD
+              TD
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-medium text-[var(--heading)] truncate">Jane Doe</p>
-              <p className="text-[12px] text-[var(--body-subtle)] truncate">Admin</p>
+              <p className="text-[14px] font-medium text-[var(--heading)] truncate">Tallindolls</p>
+              <p className="text-[12px] text-[var(--body-subtle)] truncate">Owner</p>
             </div>
           </div>
         </div>

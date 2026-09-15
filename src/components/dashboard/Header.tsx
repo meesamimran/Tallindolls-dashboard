@@ -92,10 +92,10 @@ export default function Header({
         {/* User */}
         <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-[var(--border-default)]">
           <div className="size-8 rounded-full bg-[var(--brand-softer)] flex items-center justify-center text-[var(--fg-brand)] text-xs font-bold shrink-0">
-            JD
+            TD
           </div>
           <span className="text-[14px] text-[var(--heading)] font-medium hidden lg:block">
-            Jane Doe
+            Tallindolls
           </span>
         </div>
 
