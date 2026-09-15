@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
@@ -14,6 +14,21 @@ export default function DashboardLayout({
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+
+  // Persist sidebar collapse state across refreshes.
+  useEffect(() => {
+    if (localStorage.getItem("td-sidebar-collapsed") === "1") {
+      setDesktopCollapsed(true);
+    }
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setDesktopCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("td-sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  }, []);
 
   const handleMenuClick = useCallback(() => {
     setMobileSidebarOpen(true);
@@ -34,7 +49,7 @@ export default function DashboardLayout({
         <div className="hidden lg:flex shrink-0 h-full relative">
           <Sidebar
             collapsed={desktopCollapsed}
-            onToggle={() => setDesktopCollapsed((p) => !p)}
+            onToggle={toggleSidebar}
           />
         </div>
 
